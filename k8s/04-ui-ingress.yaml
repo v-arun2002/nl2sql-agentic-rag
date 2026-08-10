@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nl2sql-ui
+  namespace: nl2sql-agentic-rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nl2sql-ui
+  template:
+    metadata:
+      labels:
+        app: nl2sql-ui
+    spec:
+      containers:
+        - name: ui
+          image: nl2sql-agentic-rag-api:latest # same image; UI just runs a different command
+          imagePullPolicy: IfNotPresent
+          command: ["streamlit", "run", "ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+          ports:
+            - containerPort: 8501
+          env:
+            - name: API_URL
+              value: "http://nl2sql-api:8000"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nl2sql-ui
+  namespace: nl2sql-agentic-rag
+spec:
+  selector:
+    app: nl2sql-ui
+  ports:
+    - port: 8501
+      targetPort: 8501
+  type: ClusterIP
+---
+# Requires an ingress controller (e.g. ingress-nginx) installed in the
+# cluster. On kind: `kind create cluster --config kind-config.yaml` with
+# extraPortMappings, then install ingress-nginx's kind-specific manifest --
+# see k8s/README.md.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nl2sql-ingress
+  namespace: nl2sql-agentic-rag
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: nl2sql-api
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nl2sql-ui
+                port:
+                  number: 8501

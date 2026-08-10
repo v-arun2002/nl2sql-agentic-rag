@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+.env
+
+data/bird-mini-dev/
+chroma_db/
+logs/*.log
+eval/results.csv
+
+.pytest_cache/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/.terraform.lock.hcl
+
+# Real k8s secret (only the .example template should ever be committed)
+k8s/01-secret.yaml
+dev_20240627/

@@ -1,0 +1,11 @@
+# Separate from the main Dockerfile -- Lambda's container runtime requires
+# AWS's base image and a specific CMD format (module.function), not a
+# standard uvicorn server process.
+FROM public.ecr.aws/lambda/python:3.11
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["api.lambda_handler.handler"]
