@@ -5,8 +5,15 @@ venv/
 
 .env
 
-data/bird-mini-dev/
-chroma_db/
+data/bird-mini-dev/*
+!data/bird-mini-dev/dev_databases/
+data/bird-mini-dev/dev_databases/*
+!data/bird-mini-dev/dev_databases/superhero/
+!data/bird-mini-dev/dev_databases/student_club/
+!data/bird-mini-dev/dev_databases/toxicology/
+!data/bird-mini-dev/dev_databases/thrombosis_prediction/
+!data/bird-mini-dev/dev_databases/california_schools/
+!data/bird-mini-dev/dev_databases/formula_1/
 logs/*.log
 eval/results.csv
 
@@ -22,3 +29,4 @@ terraform/.terraform.lock.hcl
 # Real k8s secret (only the .example template should ever be committed)
 k8s/01-secret.yaml
 dev_20240627/
+.DS_Store

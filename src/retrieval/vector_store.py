@@ -24,9 +24,7 @@ from src.config import settings
 class SchemaVectorStore:
     def __init__(self, persist_dir: str = None):
         self.client = chromadb.PersistentClient(path=persist_dir or settings.chroma_persist_dir)
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
-        )
+        self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
 
     def _collection_name(self, db_id: str) -> str:
         return f"schema_{db_id}"

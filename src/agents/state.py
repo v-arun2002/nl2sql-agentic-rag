@@ -41,10 +41,15 @@ class AgentState(TypedDict):
 
 
 def initial_state(db_id: str, question: str, evidence: Optional[str] = None, max_retries: int = 3) -> AgentState:
+    # Strip at the boundary: a trailing space in db_id propagates into the
+    # Chroma collection name ("schema_superhero ") and into the SQLite file
+    # path, failing far downstream with errors that point at the wrong
+    # culprit. Sanitising once here covers every caller -- API, UI, and the
+    # benchmark harness -- rather than patching each consumer separately.
     return {
-        "db_id": db_id,
-        "question": question,
-        "evidence": evidence,
+        "db_id": db_id.strip(),
+        "question": question.strip(),
+        "evidence": evidence.strip() if evidence else None,
         "schema_context": None,
         "plan": None,
         "sql_query": None,
