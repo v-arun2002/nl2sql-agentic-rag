@@ -30,6 +30,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import settings  # noqa: E402
+from src import demo_limits  # noqa: E402
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 DIRECT_MODE = os.getenv("UI_DIRECT_MODE", "false").lower() == "true"
@@ -149,11 +150,14 @@ html, body, [class*="st-"], .stMarkdown, p, label, span, div {
 .empty-note { font-family: 'IBM Plex Mono', monospace; font-size: .76rem; color: var(--muted); }
 .hint-note { font-family: 'IBM Plex Mono', monospace; font-size: .7rem; color: #5c6379;
   line-height: 1.5; margin: -.2rem 0 .6rem 0; }
+.quota { font-family: 'IBM Plex Mono', monospace; font-size: .7rem; color: #5c6379;
+  margin: 1.6rem 0 0 0; padding-top: .8rem; border-top: 1px solid var(--line); }
 .stButton > button { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: .8rem;
   letter-spacing: .06em; text-transform: uppercase; background: var(--violet); color: #14121f;
   border: none; border-radius: 6px; padding: .55rem 1.1rem; transition: opacity .15s ease; }
 .stButton > button:hover { opacity: .86; color: #14121f; }
 .stButton > button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.stButton > button:disabled { background: var(--panel-2); color: var(--muted); }
 .stTextArea textarea, .stTextInput input, .stSelectbox div[data-baseweb="select"] > div {
   background: var(--panel) !important; border-color: var(--line) !important; color: var(--text) !important;
   font-family: 'IBM Plex Mono', monospace !important; font-size: .82rem !important; }
@@ -389,7 +393,15 @@ if st.checkbox("Add a domain hint"):
     )
     evidence = st.text_input("Hint", value="", label_visibility="collapsed")
 
-run = st.button("Run query")
+if "queries_used" not in st.session_state:
+    st.session_state.queries_used = 0
+
+allowed, block_reason, _, _ = demo_limits.check(st.session_state.queries_used)
+
+run = st.button("Run query", disabled=not allowed)
+
+if demo_limits.ENABLED and not allowed:
+    st.warning(block_reason)
 
 # ---------------------------------------------------------------------------
 # Output
@@ -403,6 +415,11 @@ if run:
             else:
                 data = run_via_api(db_id, question, evidence or None)
         elapsed = time.monotonic() - started
+
+        # Counted only after the query completes, so a crash or an API failure
+        # doesn't consume someone's quota.
+        st.session_state.queries_used += 1
+        demo_limits.record()
 
         ok = data.get("success")
         retries = data.get("retries", 0)
@@ -467,5 +484,17 @@ else:
   <div class="d">The generated SQL, the result, and every agent hop appear here.</div>
 </div>
 """,
+        unsafe_allow_html=True,
+    )
+
+# Rendered last so the count reflects the query that just ran. Streamlit
+# re-executes the script top-to-bottom, so anything placed above the run block
+# would display the pre-query value.
+if demo_limits.ENABLED:
+    _, _, sess_left, day_left = demo_limits.check(st.session_state.queries_used)
+    st.markdown(
+        '<div class="quota">%d of %d queries left this session &middot; '
+        "%d left today across all visitors</div>"
+        % (sess_left, demo_limits.SESSION_LIMIT, day_left),
         unsafe_allow_html=True,
     )
