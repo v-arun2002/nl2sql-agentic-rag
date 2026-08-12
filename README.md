@@ -1,101 +1,4 @@
 # Agentic NL2SQL — Self-Correcting Multi-Agent SQL Generation
-
-> **Ask a database a question in plain English. Get correct SQL back.**
-> Five specialised agents, a self-correcting loop that routes each failure to
-> whichever agent caused it, and a measured **44.20%** on 500 BIRD-SQL questions
-> — without the hints most published numbers use.
-
-![Python](https://img.shields.io/badge/python-3.11+-blue)
-![LangGraph](https://img.shields.io/badge/LangGraph-state%20machine-orange)
-![Benchmark](https://img.shields.io/badge/BIRD--SQL%20Mini--Dev-44.20%25-green)
-![License](https://img.shields.io/badge/license-MIT-lightgrey)
-
-<!-- Replace with a screenshot of the running Streamlit UI showing SQL + agent trace -->
-![Demo](docs/demo.png)
-
----
-
-## Architecture
-
-![Architecture](docs/architecture.svg)
-
-Five agents wired as a [LangGraph](https://github.com/langchain-ai/langgraph)
-state machine with conditional edges (`src/graph.py`). The correction loop is the
-part worth looking at: instead of re-prompting with a raw error, an
-**error-classification router** diagnoses *why* the query failed and sends it back
-to the agent responsible — a wrong table goes to the retriever, bad syntax to the
-generator, faulty logic to the planner.
-
-### Why five agents instead of one prompt
-
-Each exists to solve a specific failure of the naive "dump-the-schema-and-ask"
-approach:
-
-- **Schemas don't fit usefully in a prompt.** 199 columns buries the relevant
-  tables in noise. The retriever narrows to the top 6 by semantic similarity.
-- **Planning and writing are different skills.** Emitting a structured plan before
-  SQL is what makes targeted correction possible — you can fix a *plan*
-  independently of fixing *syntax*.
-- **Different failures need different fixes.** A wrong table reference and a
-  malformed `GROUP BY` are not the same problem, and shouldn't get the same retry.
-
----
-
-## Results
-
-| Difficulty | Accuracy |
-|---|---|
-| simple | 61.49% (91/148) |
-| moderate | 41.60% (104/250) |
-| challenging | 25.49% (26/102) |
-| **overall** | **44.20% (221/500)** |
-
-Run without BIRD's `evidence` field — the human-written hints that often contain
-the answer's formula. That makes this a *schema-only* result: the system must
-work out what a question means from table and column structure alone. Published
-numbers on this split generally include evidence, so they aren't directly
-comparable.
-
-### Per-database accuracy — and the finding that matters
-
-| Database | Columns | Accuracy |
-|---|---|---|
-| superhero | 31 | 65.38% |
-| european_football_2 | **199** | 56.86% |
-| codebase_community | 71 | 55.10% |
-| student_club | 48 | 54.17% |
-| toxicology | 11 | 42.50% |
-| formula_1 | 94 | 42.42% |
-| card_games | 115 | 38.46% |
-| debit_card_specializing | 21 | 36.67% |
-| thrombosis_prediction | 64 | 34.00% |
-| financial | 55 | 21.88% |
-| california_schools | 89 | **16.67%** |
-
-**Schema size does not predict accuracy — semantic clarity does.**
-`european_football_2` has the largest schema in the benchmark (199 columns) and
-scores near the top. `california_schools` has less than half that and scores
-worst. The difference is whether column names carry meaning on their own:
-`superhero.publisher_name` is self-describing, while answering a
-`california_schools` question requires knowing that "total enrollment" means
-`Enrollment (K-12)` + `Enrollment (Ages 5-17)` — information present in neither
-the schema nor the column names.
-
-This runs against the intuition that bigger schemas are harder. Retrieval handles
-size well; it cannot manufacture domain knowledge that was never written down.
-
----
-
-## Why the schema index carries sample values
-
-Column names alone caused a persistent, silent failure class. Two tables in
-`debit_card_specializing` both have a `Date` column:
-
-```
-yearmonth.Date        (TEXT)  sample values: '201112', '201201', '201202'
-transactions_1k.Date  (DATE)  sample values: '2012-08-24', '2012-08-23'
-```
-
 Without seeing actual values, the model reasonably assumed ISO dates and wrote
 `strftime('%Y', Date) = '2012'` — which returns `NULL` against `'201208'` and
 silently matches zero rows. No error, no exception, just a wrong answer. Indexing
@@ -109,7 +12,7 @@ real sample values alongside column names eliminated this category entirely.
 |---|---|---|
 | Orchestration | LangGraph | explicit state + conditional routing for the correction loop |
 | LLM | Multi-provider (OpenAI / Groq / Gemini), selected per agent role | see below |
-| Retrieval | sentence-transformers + Chroma | local embeddings, no API cost, no external service |
+| Retrieval | Chroma + ONNX `all-MiniLM-L6-v2` | local embeddings, no API cost; the ONNX build rather than the PyTorch one, which cuts ~2GB of dependency and fits a 1GB container |
 | Backend | FastAPI | exposes the graph as `POST /query` |
 | Demo UI | Streamlit | shows generated SQL, results, and the full agent trace |
 | Ops | Docker, docker-compose, GitHub Actions | containerised, CI-gated regression tests |
@@ -152,6 +55,12 @@ python -m data.build_schema_index
 ```bash
 uvicorn api.main:app --reload      # http://localhost:8000/docs
 streamlit run ui/app.py            # http://localhost:8501
+```
+
+Or skip the backend entirely — `UI_DIRECT_MODE=true` invokes the graph in-process,
+which is how the hosted demo runs on a single-process host:
+```bash
+UI_DIRECT_MODE=true streamlit run ui/app.py
 ```
 
 **Benchmark:**
@@ -233,6 +142,13 @@ the generator invented plausible tables (`gas_consumption`, `payments`) that
 didn't exist. Accuracy sat at 5% for three runs. Found by testing retrieval in
 isolation instead of trusting benchmark output.
 
+**PyTorch didn't fit the deployment target.** The host allows roughly 1GB of
+memory, and `sentence-transformers` pulls in PyTorch — well over that on its own.
+Swapping to Chroma's ONNX build of the same `all-MiniLM-L6-v2` model dropped the
+dependency to ~90MB on `onnxruntime`, which Chroma already requires. Verified
+equivalent by rebuilding the index and confirming retrieval returned identical
+tables and identical sample values.
+
 **Gemini's free tier is 20 requests per day**, not per minute, for
 `gemini-3.6-flash`. No amount of exponential backoff fixes a daily cap.
 
@@ -247,7 +163,14 @@ destroying several hours of output. Fixed with explicit UTF-8 plus
 **No client timeouts.** A request that opened but never returned blocked a run
 indefinitely — backoff only catches calls that *fail*, not ones that hang.
 
+**A trailing space in user input crashed the pipeline three layers down.** Typing
+`superhero ` in the UI produced the Chroma collection name `schema_superhero `,
+which fails Chroma's name validation — surfacing as an error that pointed at the
+vector store rather than at the input. Sanitised once at the state boundary,
+where it covers every caller.
+
 ---
+
 
 ## Repository layout
 
