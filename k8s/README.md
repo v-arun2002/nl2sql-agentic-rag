@@ -25,6 +25,13 @@ EOF
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 kubectl wait --namespace ingress-nginx --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller --timeout=90s
+
+# Install metrics-server, or the HPA reports `cpu: <unknown>` and never scales.
+# Managed clusters (EKS/GKE/AKS) ship this already; kind does not. The extra
+# flag is needed because kind's kubelets serve self-signed certs.
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl patch deployment metrics-server -n kube-system --type=json \
+  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
 ```
 
 ## Build and load the image
@@ -59,6 +66,14 @@ curl http://localhost:8080/api/health         # through the ingress
 ```
 
 Visit `http://localhost:8080/` for the Streamlit UI.
+
+`http://localhost:8080` only works if the cluster was created with the
+`extraPortMappings` above. On a cluster created without them, reach the
+ingress with a port-forward instead:
+
+```bash
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
+```
 
 ## What this demonstrates vs. a real managed cluster
 
