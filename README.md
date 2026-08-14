@@ -179,8 +179,9 @@ validated end-to-end on a local `kind` cluster: a real question routed through
 the ingress returns correct SQL, and the HPA scales the API from 2 to 6 pods
 under load. See `k8s/README.md` for the setup.
 
-Manifests that have never been applied are not manifests that work. The first
-apply surfaced four bugs, none of which are visible by reading the YAML:
+Manifests that have never been applied are not manifests that work. Applying
+them surfaced six bugs, none of which are visible by reading the YAML — and the
+last two only appeared under a real query, not a health check:
 
 **A single `rewrite-target` can't serve two backends.** `nginx.ingress.kubernetes.io/rewrite-target: /`
 rewrote `/api/health` to `/`, and the API only serves `/query` and `/health` —
@@ -206,6 +207,21 @@ different claims, and only applying it distinguishes them.
 since retired that model for new users, so every query returned 500 while the
 pods stayed green — the failure was in the request path, not the health path.
 Config duplicated across two files diverges silently; the probes cannot catch it.
+
+**A 512Mi memory limit OOM-killed the pod on the first real query.** Chroma, the
+ONNX embedder and an in-flight query together exceed it, and the container died
+with exit 137 mid-request. `/health` had passed continuously up to that point,
+because serving a health check costs almost nothing. Raised to 1Gi, matching the
+container size the embedder was chosen for.
+
+**nginx returned 504 while the pod was working normally.** A multi-agent query
+with a correction loop routinely outlives ingress-nginx's 60s default
+`proxy-read-timeout`. The generated SQL was correct and the pod healthy — the
+proxy simply stopped waiting. Raised to 300s.
+
+Both of these are the same lesson as the reasoning-token bug above: a liveness
+signal that costs nothing to serve tells you nothing about whether real work
+succeeds.
 
 ## Repository layout
 

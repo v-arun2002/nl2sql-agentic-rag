@@ -31,10 +31,13 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
+            # 512Mi OOM-killed (exit 137) on the first real query: Chroma plus
+            # the ONNX embedder plus a query in flight exceeds it. The embedder
+            # is sized for a ~1GB container, so the limit has to match.
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 1Gi
           # Liveness must not run until startup succeeds, or a slow cold start
           # (large image, several pods unpacking at once) gets killed as a hang.
           startupProbe:
