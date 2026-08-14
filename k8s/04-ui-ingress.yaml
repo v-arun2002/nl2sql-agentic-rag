@@ -48,25 +48,44 @@ spec:
 # cluster. On kind: `kind create cluster --config kind-config.yaml` with
 # extraPortMappings, then install ingress-nginx's kind-specific manifest --
 # see k8s/README.md.
+# Split into two Ingresses because rewrite-target is a per-Ingress annotation:
+# /api must strip its prefix before reaching FastAPI, while the UI must not be
+# rewritten at all (Streamlit serves /_stcore/* off the root).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: nl2sql-ingress
+  name: nl2sql-api-ingress
   namespace: nl2sql-agentic-rag
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # A multi-agent query with a correction loop routinely outlives nginx's
+    # 60s default, which returns 504 while the pod is still working normally.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /api
-            pathType: Prefix
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: nl2sql-api
                 port:
                   number: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nl2sql-ui-ingress
+  namespace: nl2sql-agentic-rag
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
           - path: /
             pathType: Prefix
             backend:

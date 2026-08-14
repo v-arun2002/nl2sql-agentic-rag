@@ -171,6 +171,57 @@ where it covers every caller.
 
 ---
 
+## Kubernetes
+
+`k8s/` holds the full deployment — Namespace/ConfigMap/Secret split, Deployments
+for API, UI and Redis, resource requests and limits, probes, and an HPA. It's
+validated end-to-end on a local `kind` cluster: a real question routed through
+the ingress returns correct SQL, and the HPA scales the API from 2 to 6 pods
+under load. See `k8s/README.md` for the setup.
+
+Manifests that have never been applied are not manifests that work. Applying
+them surfaced six bugs, none of which are visible by reading the YAML — and the
+last two only appeared under a real query, not a health check:
+
+**A single `rewrite-target` can't serve two backends.** `nginx.ingress.kubernetes.io/rewrite-target: /`
+rewrote `/api/health` to `/`, and the API only serves `/query` and `/health` —
+so every API call through the ingress 404'd. The annotation is per-Ingress, not
+per-path, so one Ingress cannot both strip `/api` for FastAPI and leave the root
+untouched for Streamlit (which serves `/_stcore/*` off `/`). Split into two
+Ingress objects.
+
+**The liveness probe killed the pods it was meant to protect.** The app starts in
+about a second, but `timeoutSeconds` defaults to `1`, and with several pods
+unpacking a multi-GB image at once the probe timed out — so each pod was
+restarted mid-startup. Fixed with a `startupProbe`, which gates liveness until
+the container is actually up, rather than by guessing a larger
+`initialDelaySeconds`.
+
+**The HPA reported `cpu: <unknown>` and would never have scaled.** An HPA needs
+metrics-server, which managed clusters ship and kind does not. Nothing in the
+manifests is wrong — but "the YAML is correct" and "autoscaling works" are
+different claims, and only applying it distinguishes them.
+
+**The ConfigMap had drifted from `.env`.** It still pinned the planner to
+`gemini-2.5-flash` from before the provider move described above. Google has
+since retired that model for new users, so every query returned 500 while the
+pods stayed green — the failure was in the request path, not the health path.
+Config duplicated across two files diverges silently; the probes cannot catch it.
+
+**A 512Mi memory limit OOM-killed the pod on the first real query.** Chroma, the
+ONNX embedder and an in-flight query together exceed it, and the container died
+with exit 137 mid-request. `/health` had passed continuously up to that point,
+because serving a health check costs almost nothing. Raised to 1Gi, matching the
+container size the embedder was chosen for.
+
+**nginx returned 504 while the pod was working normally.** A multi-agent query
+with a correction loop routinely outlives ingress-nginx's 60s default
+`proxy-read-timeout`. The generated SQL was correct and the pod healthy — the
+proxy simply stopped waiting. Raised to 300s.
+
+Both of these are the same lesson as the reasoning-token bug above: a liveness
+signal that costs nothing to serve tells you nothing about whether real work
+succeeds.
 
 ## Repository layout
 
