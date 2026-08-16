@@ -1,4 +1,100 @@
 # Agentic NL2SQL — Self-Correcting Multi-Agent SQL Generation
+
+> **Ask a database a question in plain English. Get correct SQL back.**
+> Five specialised agents, a self-correcting loop that routes each failure to
+> whichever agent caused it, and a measured **44.20%** on 500 BIRD-SQL questions
+> — without the hints most published numbers use.
+
+![Python](https://img.shields.io/badge/python-3.11+-blue)
+![LangGraph](https://img.shields.io/badge/LangGraph-state%20machine-orange)
+![Benchmark](https://img.shields.io/badge/BIRD--SQL%20Mini--Dev-44.20%25-green)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+![Demo](docs/demo-nl-sql.png)
+
+---
+
+## Architecture
+
+![Architecture](docs/architecture.svg)
+
+Five agents wired as a [LangGraph](https://github.com/langchain-ai/langgraph)
+state machine with conditional edges (`src/graph.py`). The correction loop is the
+part worth looking at: instead of re-prompting with a raw error, an
+**error-classification router** diagnoses *why* the query failed and sends it back
+to the agent responsible — a wrong table goes to the retriever, bad syntax to the
+generator, faulty logic to the planner.
+
+### Why five agents instead of one prompt
+
+Each exists to solve a specific failure of the naive "dump-the-schema-and-ask"
+approach:
+
+- **Schemas don't fit usefully in a prompt.** 199 columns buries the relevant
+  tables in noise. The retriever narrows to the top 6 by semantic similarity.
+- **Planning and writing are different skills.** Emitting a structured plan before
+  SQL is what makes targeted correction possible — you can fix a *plan*
+  independently of fixing *syntax*.
+- **Different failures need different fixes.** A wrong table reference and a
+  malformed `GROUP BY` are not the same problem, and shouldn't get the same retry.
+
+---
+
+## Results
+
+| Difficulty | Accuracy |
+|---|---|
+| simple | 61.49% (91/148) |
+| moderate | 41.60% (104/250) |
+| challenging | 25.49% (26/102) |
+| **overall** | **44.20% (221/500)** |
+
+Run without BIRD's `evidence` field — the human-written hints that often contain
+the answer's formula. That makes this a *schema-only* result: the system must
+work out what a question means from table and column structure alone. Published
+numbers on this split generally include evidence, so they aren't directly
+comparable.
+
+### Per-database accuracy — and the finding that matters
+
+| Database | Columns | Accuracy |
+|---|---|---|
+| superhero | 31 | 65.38% |
+| european_football_2 | **199** | 56.86% |
+| codebase_community | 71 | 55.10% |
+| student_club | 48 | 54.17% |
+| toxicology | 11 | 42.50% |
+| formula_1 | 94 | 42.42% |
+| card_games | 115 | 38.46% |
+| debit_card_specializing | 21 | 36.67% |
+| thrombosis_prediction | 64 | 34.00% |
+| financial | 55 | 21.88% |
+| california_schools | 89 | **16.67%** |
+
+**Schema size does not predict accuracy — semantic clarity does.**
+`european_football_2` has the largest schema in the benchmark (199 columns) and
+scores near the top. `california_schools` has less than half that and scores
+worst. The difference is whether column names carry meaning on their own:
+`superhero.publisher_name` is self-describing, while answering a
+`california_schools` question requires knowing that "total enrollment" means
+`Enrollment (K-12)` + `Enrollment (Ages 5-17)` — information present in neither
+the schema nor the column names.
+
+This runs against the intuition that bigger schemas are harder. Retrieval handles
+size well; it cannot manufacture domain knowledge that was never written down.
+
+---
+
+## Why the schema index carries sample values
+
+Column names alone caused a persistent, silent failure class. Two tables in
+`debit_card_specializing` both have a `Date` column:
+
+```
+yearmonth.Date        (TEXT)  sample values: '201112', '201201', '201202'
+transactions_1k.Date  (DATE)  sample values: '2012-08-24', '2012-08-23'
+```
+
 Without seeing actual values, the model reasonably assumed ISO dates and wrote
 `strftime('%Y', Date) = '2012'` — which returns `NULL` against `'201208'` and
 silently matches zero rows. No error, no exception, just a wrong answer. Indexing
@@ -168,6 +264,31 @@ indefinitely — backoff only catches calls that *fail*, not ones that hang.
 which fails Chroma's name validation — surfacing as an error that pointed at the
 vector store rather than at the input. Sanitised once at the state boundary,
 where it covers every caller.
+
+**The CI regression test was pinned to a database the repo doesn't ship**, so it
+had failed on every push since the first commit. `.gitignore` commits 6 of BIRD's
+11 databases; the test referenced `debit_card_specializing`, which isn't one of
+them. It passed locally — where all 11 are present — and only ever failed in CI,
+which is the reason it went unnoticed.
+
+What made it genuinely hard to diagnose is that the committed Chroma index holds
+collections for all 11 databases while only 6 have `.sqlite` files. So retrieval
+*succeeded*, returned real tables, and the run proceeded normally until the
+executor tried to open a file that wasn't there. The error surfaced three nodes
+downstream of the actual cause and named the executor, pointing away from the
+missing fixture entirely. Diagnosed by checking `git ls-files` against the
+databases on disk rather than trusting a local test run. Now pinned to two
+`superhero` cases that the 500-question baseline already answers correctly with
+`retries: 0`, so a failure means a real regression rather than a borderline
+question flipping.
+
+**An empty `.dockerignore` sent the entire working tree to the Docker daemon.**
+Build context was **3.81GB** — `venv/`, `.git/`, and the raw 320MB BIRD download
+— producing a **6.85GB** image over a roughly **2 hour** build. Nothing was
+broken, which is why it survived: every build succeeded, just slowly enough that
+rebuilding was avoided, which in turn hid the four manifest bugs below behind an
+image nobody wanted to rebuild. With the file populated: **17KB** of context, a
+**3.22GB** image, and a **12 minute** build.
 
 ---
 

@@ -34,14 +34,18 @@ variable "openai_api_key" {
   sensitive   = true
 }
 
+# Kept in sync with k8s/00-namespace-configmap.yaml and .env. Do not default
+# these back to Gemini: its free tier is 20 requests/day, and gemini-2.5-flash
+# has since been retired for new users -- an apply with that default deploys a
+# Lambda where every query fails while the function itself looks healthy.
 variable "planner_provider" {
   type    = string
-  default = "gemini"
+  default = "openai"
 }
 
 variable "planner_model" {
   type    = string
-  default = "gemini-2.5-flash"
+  default = "gpt-5-mini"
 }
 
 variable "generator_provider" {

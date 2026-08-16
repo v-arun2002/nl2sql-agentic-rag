@@ -115,13 +115,36 @@ def build_tables_dict(db_id: str) -> dict:
     return tables
 
 
+def sqlite_path_for(db_id: str) -> str:
+    return f"{settings.benchmark_data_path}/dev_databases/{db_id}/{db_id}.sqlite"
+
+
 def main():
+    # DB_IDS lists all 11 BIRD databases, but the repo commits only 6 and the
+    # BIRD download is opt-in, so a missing .sqlite is the normal case rather
+    # than an error. Skip it and carry on -- without this guard the run dies on
+    # whichever database happens to be missing first and indexes nothing after.
     store = SchemaVectorStore()
+    indexed, skipped = 0, []
     for db_id in DB_IDS:
+        if not os.path.isfile(sqlite_path_for(db_id)):
+            skipped.append(db_id)
+            continue
         tables = build_tables_dict(db_id)
         store.index_schema(db_id, tables)
         total_cols = sum(len(t["columns"]) for t in tables.values())
         print(f"Indexed {db_id}: {len(tables)} tables, {total_cols} columns (with types + samples)")
+        indexed += 1
+
+    if skipped:
+        print(f"\nSkipped {len(skipped)} database(s) with no .sqlite file: {', '.join(skipped)}")
+        print("See data/README.md for how to fetch the full BIRD dev set.")
+    if indexed == 0:
+        raise SystemExit(
+            f"No databases indexed -- found no .sqlite files under "
+            f"{settings.benchmark_data_path}/dev_databases/. "
+            "An empty index silently produces hallucinated schemas, so this is a hard failure."
+        )
 
 
 if __name__ == "__main__":
