@@ -21,21 +21,43 @@ from src.agents.state import initial_state
 from src.config import settings
 from src.graph import build_graph
 
-# Real example verified against an actual exported dev.json entry
-# (question_id 1471), not a guessed placeholder.
+# Cases are pulled verbatim from dev.json, and restricted to databases the repo
+# actually commits (.gitignore ships 6 of BIRD's 11). An earlier version pinned
+# this to debit_card_specializing, which is not one of them -- it passed locally,
+# where all 11 are present, and failed in CI on every push.
+#
+# Both cases below are ones the 500-question baseline already answers correctly
+# with retries: 0, so a failure here means a real regression rather than a
+# borderline question flipping.
 REGRESSION_SET = [
     {
-        "question_id": 1471,
-        "db_id": "debit_card_specializing",
-        "question": "What is the ratio of customers who pay in EUR against customers who pay in CZK?",
+        "question_id": 717,
+        "db_id": "superhero",
+        "question": "Please list all the superpowers of 3-D Man.",
         "gold_sql": (
-            "SELECT CAST(SUM(IIF(Currency = 'EUR', 1, 0)) AS FLOAT) / "
-            "SUM(IIF(Currency = 'CZK', 1, 0)) AS ratio FROM customers"
+            "SELECT T3.power_name FROM superhero AS T1 "
+            "INNER JOIN hero_power AS T2 ON T1.id = T2.hero_id "
+            "INNER JOIN superpower AS T3 ON T2.power_id = T3.id "
+            "WHERE T1.superhero_name = '3-D Man'"
+        ),
+    },
+    {
+        "question_id": 719,
+        "db_id": "superhero",
+        "question": (
+            'Among the superheroes with the super power of "Super Strength", '
+            "how many of them have a height of over 200cm?"
+        ),
+        "gold_sql": (
+            "SELECT COUNT(T1.id) FROM superhero AS T1 "
+            "INNER JOIN hero_power AS T2 ON T1.id = T2.hero_id "
+            "INNER JOIN superpower AS T3 ON T2.power_id = T3.id "
+            "WHERE T3.power_name = 'Super Strength' AND T1.height_cm > 200"
         ),
     },
     # Add more {question_id, db_id, question, gold_sql} entries here as the
     # regression set grows -- pull them straight from dev.json to guarantee
-    # they're real, not guessed.
+    # they're real, not guessed, and keep to the 6 committed databases.
 ]
 
 
