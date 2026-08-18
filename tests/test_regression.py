@@ -21,6 +21,30 @@ from src.agents.state import initial_state
 from src.config import settings
 from src.graph import build_graph
 
+# These call live providers, so they skip rather than fail when the relevant
+# keys aren't configured -- an absent key is "not run here", not a regression.
+# Only the providers actually routed to are required: swapping a role to a
+# different provider changes which key this needs, with no edit here.
+_PROVIDER_KEYS = {
+    "openai": settings.openai_api_key,
+    "groq": settings.groq_api_key,
+    "gemini": settings.gemini_api_key,
+}
+_REQUIRED = {
+    settings.planner_provider,
+    settings.generator_provider,
+    settings.classifier_provider,
+}
+_MISSING = sorted(p for p in _REQUIRED if not _PROVIDER_KEYS.get(p))
+
+pytestmark = pytest.mark.skipif(
+    bool(_MISSING),
+    reason=(
+        f"No API key for configured provider(s): {', '.join(_MISSING)}. "
+        "Set them in .env locally, or as repository secrets in CI."
+    ),
+)
+
 # Cases are pulled verbatim from dev.json, and restricted to databases the repo
 # actually commits (.gitignore ships 6 of BIRD's 11). An earlier version pinned
 # this to debit_card_specializing, which is not one of them -- it passed locally,
