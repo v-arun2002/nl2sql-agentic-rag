@@ -1,13 +1,18 @@
-name: Regression Eval
+name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  test:
+  # Pure logic: no API keys, no network, no BIRD databases. Runs on every push
+  # and is expected to be green -- a failure here is a real defect, never a
+  # provider outage or an unset secret.
+  unit:
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,6 +20,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest tests/test_units.py -v
+
+  # End-to-end accuracy against live providers. Manual only: it spends real API
+  # budget on every run, and a provider being down would otherwise redden the
+  # badge for a reason that has nothing to do with the code. Run it from the
+  # Actions tab ("Run workflow") after a change to prompts, agents or routing.
+  #
+  # To make this run automatically instead, drop the `if:` below -- the tests
+  # themselves skip cleanly when the provider keys aren't set, so it won't fail
+  # on a fork or on a repo without secrets configured.
+  regression:
+    name: Regression (live providers)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -25,4 +57,4 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           BENCHMARK_DATA_PATH: ${{ vars.BENCHMARK_DATA_PATH || './data/bird-mini-dev' }}
-        run: pytest tests/test_regression.py -v
+        run: pytest tests/test_regression.py -v -rs

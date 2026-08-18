@@ -17,7 +17,6 @@ Runs in two modes:
 
 import html
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -31,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import settings  # noqa: E402
 from src import demo_limits  # noqa: E402
+from ui.sql_highlight import highlight_sql  # noqa: E402,F401
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 DIRECT_MODE = os.getenv("UI_DIRECT_MODE", "false").lower() == "true"
@@ -232,37 +232,6 @@ def esc(v) -> str:
     return html.escape(str(v))
 
 
-SQL_KEYWORDS = (
-    "WITH|SELECT|DISTINCT|FROM|WHERE|INNER JOIN|LEFT JOIN|OUTER JOIN|JOIN|ON|USING"
-    "|GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|AS|AND|OR|NOT|NULL|IS|IN|EXISTS|BETWEEN|LIKE"
-    "|CASE|WHEN|THEN|ELSE|END|UNION ALL|UNION|ASC|DESC|COUNT|SUM|AVG|MAX|MIN|CAST|SUBSTR"
-    "|COALESCE|NULLIF|IIF|STRFTIME|ROUND|ABS|REAL|INTEGER|FLOAT|TEXT|OVER|PARTITION BY|RANK"
-)
-SQL_TOKEN = re.compile(
-    r"(?P<comment>--[^\n]*)"
-    r"|(?P<str>'[^']*')"
-    r"|(?P<kw>\b(?:" + SQL_KEYWORDS + r")\b)"
-    r"|(?P<num>\b\d+(?:\.\d+)?\b)",
-    re.IGNORECASE,
-)
-
-
-def highlight_sql(sql: str) -> str:
-    """
-    Rendered in-house rather than with st.code, which ships its own light theme
-    and ignores the surrounding palette. quote=False keeps single quotes intact
-    so the string-literal pattern still matches; &, < and > are still escaped,
-    and spans are only added afterwards.
-    """
-    escaped = html.escape(sql or "", quote=False)
-
-    def sub(m):
-        for kind in ("comment", "str", "kw", "num"):
-            if m.group(kind):
-                return '<span class="sql-%s">%s</span>' % (kind, m.group(kind))
-        return m.group(0)
-
-    return SQL_TOKEN.sub(sub, escaped)
 
 
 def render_node(step: dict) -> str:
