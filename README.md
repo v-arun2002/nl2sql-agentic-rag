@@ -258,6 +258,13 @@ an empty or partial index doesn't error, it returns a partial schema that the
 generator then fills in by invention — the silent-hallucination failure recorded
 below.
 
+The 50MB cap lives in `.streamlit/config.toml` as `maxUploadSize`, not only in
+application code. Streamlit buffers the whole file before any handler sees it, so
+rejecting an oversized upload in `src/uploads.py` happens after the memory has
+already been spent — and the widget advertises the server's limit regardless of
+what the app says, which is how it came to promise "200MB per file" beside a note
+claiming 50MB.
+
 Uploads are session-scoped and stored in the OS temp directory, so they disappear
 when the container restarts. They require the pipeline to share a filesystem with
 the UI, which holds in `UI_DIRECT_MODE` (the deployed configuration) but not under
@@ -388,6 +395,31 @@ databases on disk rather than trusting a local test run. Now pinned to two
 `superhero` cases that the 500-question baseline already answers correctly with
 `retries: 0`, so a failure means a real regression rather than a borderline
 question flipping.
+
+**A global `font-family` rule broke every Material icon in the app.** The upload
+button read `uploadupload`, and the expander had previously shown `_arrow_right`.
+Streamlit's icons are *ligature* fonts: the element's text really is the word
+`upload`, and the font turns it into a glyph. The app's own base rule —
+`html, body, [class*="st-"], span, div { font-family: 'Space Grotesk', ... }` —
+matches those icon spans, so the icon font was overridden and the ligature
+rendered as its own name. Diagnosed by reading the computed style off the icon
+span in a real browser, which reported `"Space Grotesk"`; the earlier assumption
+that the icon font "wasn't loading" was wrong, and the expander was replaced with
+a checkbox to work around a problem the stylesheet was causing. Re-asserting the
+font on `[data-testid="stIconMaterial"]` after the base rule fixes every icon at
+once — `document.fonts.check` goes from `false` to `true`, because the font was
+never requested while the override was in force.
+
+**Clicking Remove on an uploaded database brought it straight back.** Removal
+deleted the file, the collection and the registry entry, and then the next rerun
+re-registered the same database under a fresh `db_id`. `st.file_uploader` still
+held the file, and clearing the de-duplication fingerprint made that file look
+new. Only visible in a browser: the registry went from one entry to one entry, so
+any assertion on the count passed, and the id had changed underneath. Fixed by
+resetting the widget itself — its `key` carries a nonce that Remove increments —
+so there is no file left to re-register. This is the one bug in the upload feature
+that `streamlit.testing`'s `AppTest` could not have caught, since it cannot
+populate a file uploader.
 
 **Chroma's `delete_collection` doesn't free the disk it used.** It removes the
 metadata rows, so the collection stops existing by every API the code can see —
