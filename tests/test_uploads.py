@@ -17,7 +17,6 @@ import pytest
 from src import uploads
 from src.db.connection import connect_readonly
 from src.db.executor import executor_node, resolve_db_path
-from src.retrieval.vector_store import SchemaVectorStore
 
 
 def make_db_bytes(tmp_path, tables=("employees",), rows=3):
@@ -47,9 +46,16 @@ def isolated(tmp_path, monkeypatch):
     root.mkdir()
     monkeypatch.setattr(uploads, "UPLOAD_ROOT", root)
     monkeypatch.setattr(uploads, "REGISTRY_PATH", root / "registry.json")
+    monkeypatch.setattr(uploads, "CHROMA_DIR", tmp_path / "chroma")
 
+    # Also redirect the shipped store, so a test that reaches for the wrong one
+    # fails loudly here instead of quietly reading the committed chroma_db/.
     from src.config import settings
-    monkeypatch.setattr(settings, "chroma_persist_dir", str(tmp_path / "chroma"))
+    monkeypatch.setattr(settings, "chroma_persist_dir", str(tmp_path / "shipped_chroma"))
+
+    # schema_retriever memoises the upload store at module level.
+    from src.agents import schema_retriever
+    monkeypatch.setattr(schema_retriever, "_upload_store", None)
     return root
 
 
@@ -122,7 +128,7 @@ class TestRegister:
         assert entry["original_name"] == "My Report.sqlite"
         assert uploads.resolve_path(entry["db_id"])
         assert uploads.is_upload(entry["db_id"])
-        assert SchemaVectorStore().has_schema(entry["db_id"])
+        assert uploads.store().has_schema(entry["db_id"])
 
     def test_db_id_is_a_valid_chroma_collection_name(self, isolated, tmp_path):
         """Chroma requires [a-zA-Z0-9._-] and an alphanumeric last character;
@@ -163,6 +169,47 @@ class TestRegister:
     def test_executor_falls_back_to_the_bird_layout(self, isolated):
         """A non-upload db_id must still resolve to the BIRD path."""
         assert resolve_db_path("superhero").endswith("dev_databases/superhero/superhero.sqlite")
+
+
+class TestStorageSeparation:
+    """
+    The shipped index is a committed artifact the deployed app cannot rebuild;
+    upload segments are per-session garbage. They previously shared one directory,
+    so every upload dirtied a tracked path and cleanup had to reason about two
+    lifecycles at once.
+    """
+
+    def test_indexing_an_upload_never_touches_the_shipped_store(self, isolated, tmp_path):
+        shipped = tmp_path / "shipped_chroma"
+        uploads.register(make_db_bytes(tmp_path), "sep.sqlite", "s1")
+
+        assert not shipped.exists(), "an upload wrote into the shipped index directory"
+        assert (tmp_path / "chroma").exists()
+
+    def test_upload_collections_are_invisible_to_the_shipped_store(self, isolated, tmp_path):
+        from src.retrieval.vector_store import SchemaVectorStore
+
+        entry = uploads.register(make_db_bytes(tmp_path), "sep.sqlite", "s1")
+
+        assert uploads.store().has_schema(entry["db_id"])
+        assert SchemaVectorStore().has_schema(entry["db_id"]) is False
+
+    def test_retrieval_routes_an_upload_to_the_upload_store(self, isolated, tmp_path):
+        """The retriever holds a module-level store for the shipped index; an
+        upload must not be looked up there or it retrieves nothing."""
+        from src.agents.schema_retriever import schema_retriever_node, store_for
+
+        entry = uploads.register(make_db_bytes(tmp_path), "sep.sqlite", "s1")
+        assert store_for(entry["db_id"]) is not store_for("superhero")
+
+        out = schema_retriever_node({
+            "db_id": entry["db_id"],
+            "question": "who earns the most?",
+            "retry_count": 0,
+            "trace": [],
+        })
+        assert "employees" in out["schema_context"]
+        assert out["trace"][-1]["retrieved_tables"] == ["employees"]
 
 
 # --------------------------------------------------------------------------
@@ -245,12 +292,12 @@ class TestExplicitRemoval:
         db_id = entry["db_id"]
         path = uploads.resolve_path(db_id)
 
-        assert SchemaVectorStore().has_schema(db_id)
+        assert uploads.store().has_schema(db_id)
 
         assert uploads.remove(db_id) is True
 
         assert not __import__("os").path.exists(path)
-        assert SchemaVectorStore().has_schema(db_id) is False
+        assert uploads.store().has_schema(db_id) is False
         assert uploads.resolve_path(db_id) is None
         assert db_id not in uploads._load()
 
@@ -286,7 +333,7 @@ class TestExplicitRemoval:
         orphan.mkdir()
         (orphan / "data_level0.bin").write_bytes(b"stale")
 
-        assert SchemaVectorStore().reap_orphaned_segments() == 1
+        assert uploads.store().reap_orphaned_segments() == 1
         assert not orphan.exists()
 
     def test_reaper_ignores_non_uuid_directories(self, isolated, tmp_path):
@@ -295,13 +342,13 @@ class TestExplicitRemoval:
         keep = tmp_path / "chroma" / "not-a-segment"
         keep.mkdir()
 
-        SchemaVectorStore().reap_orphaned_segments()
+        uploads.store().reap_orphaned_segments()
         assert keep.exists()
 
     def test_reaper_keeps_directories_that_are_still_referenced(self, isolated, tmp_path):
         """The reaper must not delete a live collection's segments."""
         entry = uploads.register(make_db_bytes(tmp_path), "live.sqlite", "s1")
-        store = SchemaVectorStore()
+        store = uploads.store()
 
         assert store.reap_orphaned_segments() == 0
         assert store.has_schema(entry["db_id"])
@@ -320,7 +367,7 @@ class TestExplicitRemoval:
         uploads.remove(drop["db_id"])
 
         assert uploads.resolve_path(keep["db_id"])
-        assert SchemaVectorStore().has_schema(keep["db_id"])
+        assert uploads.store().has_schema(keep["db_id"])
 
 
 class TestAutomaticEviction:
@@ -343,7 +390,7 @@ class TestAutomaticEviction:
         first = uploads.register(data, "first.sqlite", "s1")
         uploads.register(data, "second.sqlite", "s1")
 
-        assert SchemaVectorStore().has_schema(first["db_id"]) is False
+        assert uploads.store().has_schema(first["db_id"]) is False
 
     def test_entries_past_their_ttl_are_evicted(self, isolated, tmp_path, monkeypatch):
         entry = uploads.register(make_db_bytes(tmp_path), "old.sqlite", "s1")

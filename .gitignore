@@ -19,6 +19,12 @@ eval/results.csv
 
 .pytest_cache/
 
+# Chroma store for demo uploads. Defaults to a temp directory (see
+# src/uploads.py CHROMA_DIR) so it never lands here at all; this covers pointing
+# UPLOAD_CHROMA_DIR at the project during development. chroma_db/ itself IS
+# committed -- it is the shipped index, and the deployed app cannot rebuild it.
+chroma_uploads/
+
 # Terraform
 terraform/.terraform/
 terraform/*.tfstate
