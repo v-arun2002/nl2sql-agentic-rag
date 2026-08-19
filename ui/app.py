@@ -173,6 +173,49 @@ html, body, [class*="st-"], .stMarkdown, p, label, span, div {
 .idle .t { font-family: 'IBM Plex Mono', monospace; font-size: .8rem; color: var(--muted); margin-bottom: .45rem; }
 .idle .d { font-size: .82rem; color: #5c6379; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* Streamlit's Material icons are ligature fonts: the element's text is literally
+   "upload", and the font turns it into a glyph. The global font-family rule above
+   matches `span`, so it was overriding the icon font and the ligature rendered as
+   the word -- the "uploadupload" on the upload button, and the same cause as the
+   expander's _arrow_right. The font loads fine; it just has to be re-asserted
+   here, after the rule that clobbers it. */
+[data-testid="stIconMaterial"] { font-family: 'Material Symbols Rounded' !important;
+  font-weight: normal !important; font-style: normal; letter-spacing: normal !important;
+  text-transform: none; white-space: nowrap; direction: ltr;
+  font-feature-settings: 'liga'; -webkit-font-feature-settings: 'liga'; }
+/* One panel-coloured box: the outer wrapper draws the border, the dropzone inside
+   stays transparent so the two don't nest visibly. */
+[data-testid="stFileUploader"] { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: .5rem .7rem; }
+[data-testid="stFileUploaderDropzone"] { background: transparent !important;
+  border: none !important; color: var(--text) !important; padding: .3rem .15rem !important; }
+[data-testid="stFileUploaderDropzoneInstructions"] { color: var(--muted) !important; }
+[data-testid="stFileUploaderDropzoneInstructions"] span,
+[data-testid="stFileUploaderDropzoneInstructions"] small,
+[data-testid="stFileUploaderDropzoneInstructions"] div { color: var(--muted) !important; }
+[data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] { background: var(--panel-2) !important;
+  border: 1px solid var(--line) !important; color: var(--text) !important; border-radius: 6px; }
+[data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"]:hover { border-color: var(--violet) !important;
+  color: var(--violet) !important; }
+/* The selected-file chip. Its icon tile is painted with the theme's textColor,
+   i.e. near-white on this palette, so the unnamed wrapper divs are neutralised
+   and the glyph left to carry the colour. */
+[data-testid="stFileChips"] { margin-top: .45rem; }
+[data-testid="stFileChip"] { background: var(--panel-2) !important;
+  border: 1px solid var(--line) !important; border-radius: 6px; }
+[data-testid="stFileChip"] div:not([data-testid]) { background: transparent !important; }
+[data-testid="stFileChip"] [data-testid="stIconMaterial"] { color: var(--muted) !important; }
+[data-testid="stFileChipName"] { font-family: 'IBM Plex Mono', monospace; font-size: .76rem;
+  color: var(--text) !important; }
+[data-testid="stFileChipDeleteBtn"] { color: var(--muted) !important; }
+[data-testid="stFileChipDeleteBtn"]:hover { color: var(--rose) !important; }
+/* Remove is destructive and was rendering as loud as Run query, since both are
+   stBaseButton-secondary. Scoped through the st-key-* wrapper Streamlit emits for
+   a button given an explicit key, so Run query is unaffected. */
+[class*="st-key-rm_"] button { background: var(--panel-2) !important;
+  border: 1px solid var(--line) !important; color: var(--muted) !important; }
+[class*="st-key-rm_"] button:hover { border-color: var(--rose) !important; color: var(--rose) !important; }
+[class*="st-key-rm_"] button p { color: inherit !important; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -394,11 +437,24 @@ if st.checkbox("Use my own SQLite database"):
         unsafe_allow_html=True,
     )
 
+    # The nonce is part of the widget key so that Remove can reset the uploader.
+    # Without it, Remove deleted the registry entry while the widget still held
+    # the file, and the very next rerun re-registered it under a new db_id --
+    # the upload appeared to come back on its own.
+    if "uploader_nonce" not in st.session_state:
+        st.session_state.uploader_nonce = 0
+
     uploaded = st.file_uploader(
         "SQLite file",
         type=[s.lstrip(".") for s in sorted(uploads.ALLOWED_SUFFIXES)],
         label_visibility="collapsed",
+        key="sqlite_uploader_%d" % st.session_state.uploader_nonce,
     )
+
+    # Clearing the widget (the chip's x) is what licenses re-indexing the same
+    # file again; while a file is still shown, its fingerprint suppresses reruns.
+    if uploaded is None:
+        st.session_state.last_upload = None
 
     # Streamlit hands back the same file on every rerun, so without a fingerprint
     # the app would re-index on each interaction.
@@ -458,6 +514,9 @@ if st.checkbox("Use my own SQLite database"):
                 uploads.remove(entry["db_id"])
                 if st.session_state.get("active_upload") == entry["db_id"]:
                     st.session_state.active_upload = None
+                # Reset the uploader widget rather than just the fingerprint, so
+                # the file it is still holding cannot be re-registered on rerun.
+                st.session_state.uploader_nonce += 1
                 st.session_state.last_upload = None
                 st.rerun()
 

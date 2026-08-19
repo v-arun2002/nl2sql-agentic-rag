@@ -1,0 +1,17 @@
+[server]
+# Streamlit's default is 200MB, which the uploader advertises verbatim ("200MB
+# per file") regardless of what the app says. The demo host has ~1GB of memory,
+# so a 200MB upload would OOM it -- and src/uploads.py rejecting the file after
+# the fact is too late, since Streamlit has already buffered the whole thing.
+# Keep this in step with UPLOAD_MAX_BYTES (50MB) in .env.example.
+maxUploadSize = 50
+
+[theme]
+# Declared so Streamlit's own chrome (widget backgrounds, borders, menus) starts
+# from the dark palette in ui/app.py rather than the light default, which the
+# CSS then has to fight per widget.
+base = "dark"
+backgroundColor = "#0f1117"
+secondaryBackgroundColor = "#161923"
+textColor = "#e8eaf2"
+primaryColor = "#a78bfa"
