@@ -83,6 +83,69 @@ the schema nor the column names.
 This runs against the intuition that bigger schemas are harder. Retrieval handles
 size well; it cannot manufacture domain knowledge that was never written down.
 
+### Ablation: what BIRD's `evidence` field is actually worth
+
+The claim above — that the ceiling is missing domain knowledge rather than
+retrieval or reasoning — is testable. Turning `INCLUDE_EVIDENCE_IN_PROMPTS=true`
+supplies exactly that missing knowledge and changes nothing else: same models,
+same providers, same retrieval, same prompts otherwise.
+
+Measured on the **first 150 questions** (not the full 500 — see the caveats
+below), against the same 150 rows of the baseline:
+
+| | Baseline (schema-only) | With `evidence` | Δ |
+|---|---|---|---|
+| simple | 62.50% (30/48) | 68.75% (33/48) | +3 |
+| moderate | 40.58% (28/69) | 46.38% (32/69) | +4 |
+| challenging | 24.24% (8/33) | **42.42% (14/33)** | +6 |
+| **overall** | **44.00% (66/150)** | **52.67% (79/150)** | **+13** |
+
+**+8.67 percentage points, and 17 fixed against 4 broken.** McNemar's exact test
+on the 21 discordant pairs gives *p* = 0.0072, so unlike the prompt-rewrite
+experiment recorded below, this one clears noise at this sample size. The largest
+gain is on `challenging` questions, which nearly double — the questions where a
+formula is most likely to be the thing standing in the way.
+
+**What the hint actually supplies** is domain knowledge, in three recurring
+forms — none of it inferable from schema:
+
+- **A formula.** *"Average Monthly consumption = AVG(Consumption) / 12"* — the
+  baseline wrote `AVG(Consumption)` and stopped, which is a defensible reading of
+  the question and the wrong answer.
+- **A value encoding.** *"Czech Republic ... is 'CZE'"*, or normal anti-centromere
+  meaning `CENTROMEA IN ('-', '+-')`. The schema shows the column; nothing shows
+  which literal means what.
+- **Which column a phrase refers to.** *"date the dues was paid refers to
+  `date_received` where `source = 'Dues'`"*.
+
+This is the same category as the `california_schools` failure above, and the
+ablation confirms the diagnosis: supply the missing knowledge and roughly a third
+of the previously-failing questions in this slice resolve.
+
+**Caveats, in order of how much they should temper the number:**
+
+1. **n = 150, not 500.** The headline **44.20%** remains the schema-only figure
+   over the full set and is the number to compare against published results. The
+   150-question slice scores 44.00% on the baseline, close enough that it looks
+   representative, but it covers only 4 of the 11 databases.
+2. **`evidence` reaches the planner only.** `src/agents/query_planner.py` is its
+   sole consumer; the generator sees the resulting plan, never the hint itself.
+   A gain this size from a partial wiring suggests feeding it to the generator
+   too would be worth measuring.
+3. **One of the four regressions had no `evidence` at all** (`question_id` 1528,
+   empty hint), so it is run-to-run nondeterminism rather than an effect of the
+   change. The honest regression count attributable to evidence is 3, not 4.
+4. **Sometimes the hint is simply wrong.** On `question_id` 1275 the evidence
+   says `CENTROMEA IN ('-', '+-')` while BIRD's own gold SQL uses
+   `IN ('negative', '0')`. Following the hint faithfully produces a wrong answer
+   against the reference — a reminder that `evidence` is human-written annotation,
+   not ground truth, and that some of the gap it closes is itself annotation
+   artifact.
+
+Reproduce with `python -m scripts.compare_ablation eval/results_500_baseline.csv
+eval/results_150_with_evidence.csv 150`. Both arms' per-question rows are
+committed.
+
 ---
 
 ## Why the schema index carries sample values
