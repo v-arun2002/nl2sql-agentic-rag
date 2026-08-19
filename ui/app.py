@@ -19,6 +19,7 @@ import html
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import streamlit as st
@@ -30,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import settings  # noqa: E402
 from src import demo_limits  # noqa: E402
+from src import uploads  # noqa: E402
 from ui.sql_highlight import highlight_sql  # noqa: E402,F401
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
@@ -336,16 +338,155 @@ def render_result(rows) -> str:
 # Input
 # ---------------------------------------------------------------------------
 if not DATABASES:
-    st.error(
-        "No databases found under %s/dev_databases. See data/README.md for setup."
+    # A warning rather than st.stop(): an upload is still a perfectly good way
+    # to use the demo, so a deployment without the BIRD files is degraded, not
+    # broken. The hard stop comes later only if there is nothing at all.
+    st.warning(
+        "No bundled databases found under %s/dev_databases (see data/README.md). "
+        "You can still upload your own SQLite file below."
         % settings.benchmark_data_path
     )
+
+# ---------------------------------------------------------------------------
+# Upload your own database
+#
+# Session-scoped by design: files land in the OS temp directory, are capped in
+# both size and number, and expire. See src/uploads.py for the eviction rules.
+# ---------------------------------------------------------------------------
+if "session_id" not in st.session_state:
+    st.session_state.session_id = uuid.uuid4().hex
+
+SESSION_ID = st.session_state.session_id
+
+
+def _upload_label(entry: dict) -> str:
+    return "%s (uploaded)" % entry["original_name"]
+
+
+def _human_size(n: int) -> str:
+    """KB below a megabyte, so a small upload doesn't read as '0.0MB'."""
+    return "%.0fKB" % (n / 1024) if n < 1024 * 1024 else "%.1fMB" % (n / 1024 / 1024)
+
+
+if st.checkbox("Use my own SQLite database"):
+    if not DIRECT_MODE:
+        # The API process resolves upload paths from the same temp-directory
+        # registry, which only works when it shares a filesystem with the UI.
+        # Under docker-compose they are separate containers, so say so instead
+        # of letting the query fail with a confusing "no such table".
+        st.warning(
+            "This build talks to a separate API process (UI_DIRECT_MODE=false). "
+            "Uploads are only visible to the pipeline when the UI and API share "
+            "a filesystem — run with UI_DIRECT_MODE=true to use this."
+        )
+
+    st.markdown(
+        '<div class="hint-note">Files are session-scoped and stored in a temp '
+        "directory: they disappear when the container restarts, and are removed "
+        "automatically after %d minutes or once %d databases are loaded "
+        "(oldest first). Max %dMB. Queries run <strong>read-only</strong> — "
+        "generated SQL cannot modify your data.</div>"
+        % (
+            uploads.TTL_SECONDS // 60,
+            uploads.MAX_CONCURRENT,
+            uploads.MAX_UPLOAD_BYTES // 1024 // 1024,
+        ),
+        unsafe_allow_html=True,
+    )
+
+    uploaded = st.file_uploader(
+        "SQLite file",
+        type=[s.lstrip(".") for s in sorted(uploads.ALLOWED_SUFFIXES)],
+        label_visibility="collapsed",
+    )
+
+    # Streamlit hands back the same file on every rerun, so without a fingerprint
+    # the app would re-index on each interaction.
+    if uploaded is not None:
+        data = uploaded.getvalue()
+        fingerprint = (uploaded.name, len(data))
+        if st.session_state.get("last_upload") != fingerprint:
+            bar = st.progress(0.0, text="Reading file…")
+            try:
+                entry = uploads.register(
+                    data,
+                    uploaded.name,
+                    SESSION_ID,
+                    on_progress=lambda done, total: bar.progress(
+                        done / total, text="Indexing schema… %d/%d tables" % (done, total)
+                    ),
+                )
+            except uploads.UploadError as e:
+                bar.empty()
+                st.error(str(e))
+                st.session_state.last_upload = fingerprint  # don't retry on rerun
+            except Exception as e:  # noqa: BLE001 -- last resort, still no traceback
+                bar.empty()
+                st.error("Upload failed: %s" % e)
+                st.session_state.last_upload = fingerprint
+            else:
+                bar.empty()
+                st.session_state.last_upload = fingerprint
+                st.session_state.active_upload = entry["db_id"]
+                st.success(
+                    "Indexed **%s** — %d table%s: %s"
+                    % (
+                        entry["original_name"],
+                        len(entry["tables"]),
+                        "" if len(entry["tables"]) == 1 else "s",
+                        ", ".join(entry["tables"][:8])
+                        + ("…" if len(entry["tables"]) > 8 else ""),
+                    )
+                )
+
+    # Remove control, one row per upload. The automatic eviction in
+    # src/uploads.py is the backstop for everyone who never clicks this.
+    for entry in uploads.list_for_session(SESSION_ID):
+        row, btn = st.columns([4, 1])
+        with row:
+            st.caption(
+                "%s — %d table%s, %s"
+                % (
+                    entry["original_name"],
+                    len(entry["tables"]),
+                    "" if len(entry["tables"]) == 1 else "s",
+                    _human_size(entry["bytes"]),
+                )
+            )
+        with btn:
+            if st.button("Remove", key="rm_%s" % entry["db_id"]):
+                uploads.remove(entry["db_id"])
+                if st.session_state.get("active_upload") == entry["db_id"]:
+                    st.session_state.active_upload = None
+                st.session_state.last_upload = None
+                st.rerun()
+
+# Uploads join the bundled databases in one dropdown, listed first so a
+# just-uploaded database is easy to find.
+MY_UPLOADS = uploads.list_for_session(SESSION_ID)
+UPLOAD_IDS = [e["db_id"] for e in MY_UPLOADS]
+UPLOAD_LABELS = {e["db_id"]: _upload_label(e) for e in MY_UPLOADS}
+ALL_DATABASES = UPLOAD_IDS + DATABASES
+
+if not ALL_DATABASES:
+    st.info("Upload a SQLite database above to get started.")
     st.stop()
 
 c1, c2 = st.columns([1, 2.4])
 with c1:
-    default_ix = DATABASES.index("superhero") if "superhero" in DATABASES else 0
-    db_id = st.selectbox("Database", DATABASES, index=default_ix)
+    active = st.session_state.get("active_upload")
+    if active in ALL_DATABASES:
+        default_ix = ALL_DATABASES.index(active)
+    elif "superhero" in ALL_DATABASES:
+        default_ix = ALL_DATABASES.index("superhero")
+    else:
+        default_ix = 0
+    db_id = st.selectbox(
+        "Database",
+        ALL_DATABASES,
+        index=default_ix,
+        format_func=lambda d: UPLOAD_LABELS.get(d, d),
+    )
 with c2:
     question = st.text_area("Question", value=EXAMPLES.get(db_id, ""), height=76)
 

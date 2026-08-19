@@ -222,6 +222,50 @@ which is how the hosted demo runs on a single-process host:
 UI_DIRECT_MODE=true streamlit run ui/app.py
 ```
 
+### Querying your own database
+
+The demo also accepts a SQLite upload, so it can be tried against real data
+rather than only the bundled BIRD databases. On upload the file is validated,
+its schema is introspected and embedded into its own Chroma collection, and it
+joins the dropdown alongside the bundled ones.
+
+Three constraints shape the implementation, and all three come from it being a
+*public* demo on a ~1GB host:
+
+**Everything is read-only.** Generated SQL is model output, and the target may be
+a stranger's data, so `src/db/connection.py` opens every connection with both
+`mode=ro` *and* `PRAGMA query_only`. Two mechanisms rather than one because they
+cover different holes: `mode=ro` refuses writes to the main database and refuses
+to create a missing file, while `query_only` also covers a database `ATTACH`ed
+later in the same connection — `ATTACH` is itself a read, so `mode=ro` alone
+permits it and a write through it would otherwise land. This applies to the
+bundled databases too: a hallucinated `DROP` against a shipped BIRD file would
+otherwise corrupt the demo for everyone until the next redeploy.
+
+**Uploads are capped and evicted.** 50MB per file, three concurrent databases,
+and a one-hour TTL. There is a visible Remove button, and eviction runs on every
+registry read as the backstop — because most visitors will simply close the tab,
+and without the automatic side uploads accumulate until the host is killed.
+Removal frees the file, the Chroma collection, *and* the collection's segment
+directory — see the `delete_collection` entry under notable bugs for why that
+third one is not implied by the second.
+
+**Validation happens before indexing, not at query time.** Extension, size, and
+the `SQLite format 3` magic header are checked first, then the file is opened and
+required to contain at least one table. A truncated or table-less upload is
+rejected with a message and leaves nothing behind. Failing early matters here:
+an empty or partial index doesn't error, it returns a partial schema that the
+generator then fills in by invention — the silent-hallucination failure recorded
+below.
+
+Uploads are session-scoped and stored in the OS temp directory, so they disappear
+when the container restarts. They require the pipeline to share a filesystem with
+the UI, which holds in `UI_DIRECT_MODE` (the deployed configuration) but not under
+docker-compose, where the API runs in a separate container — the UI says so rather
+than letting the query fail confusingly. Tunable via `UPLOAD_MAX_BYTES`,
+`UPLOAD_MAX_CONCURRENT`, and `UPLOAD_TTL_SECONDS`; the existing demo query caps
+still apply, since every query spends real API budget.
+
 **Benchmark:**
 ```bash
 python -m eval.run_benchmark               # full 500
@@ -345,6 +389,27 @@ databases on disk rather than trusting a local test run. Now pinned to two
 `retries: 0`, so a failure means a real regression rather than a borderline
 question flipping.
 
+**Chroma's `delete_collection` doesn't free the disk it used.** It removes the
+metadata rows, so the collection stops existing by every API the code can see —
+`list_collections` no longer returns it — while its HNSW segment directory stays
+on disk with `data_level0.bin` intact, ~170KB for a narrow schema and more for a
+wide one. Found while verifying upload cleanup: the collection count went to
+zero, and two orphaned UUID directories were sitting in `chroma_db/`,
+unreferenced by the `segments` table. On the demo host that is a leak per upload
+that no TTL reclaims, which is precisely the accumulation the eviction policy
+exists to prevent. Fixed by reaping directories whose UUID is absent from
+Chroma's own `segments` table.
+
+Two things worth recording about the fix. The first attempt reported success it
+hadn't achieved: `shutil.rmtree(..., ignore_errors=True)` swallows the
+`PermissionError` raised while Chroma still holds the files mmap'd, so the
+counter incremented for directories that were still there — the test caught it
+by measuring the directory, not the return value. And the guard "no rows means a
+bad read, so do nothing" was wrong in the one case that matters: deleting the
+last collection empties `segments` legitimately, so the reaper skipped exactly
+the cleanup it was written for. It now checks that the table *exists* instead of
+inferring from emptiness.
+
 **An empty `.dockerignore` sent the entire working tree to the Docker daemon.**
 Build context was **3.81GB** — `venv/`, `.git/`, and the raw 320MB BIRD download
 — producing a **6.85GB** image over a roughly **2 hour** build. Nothing was
@@ -418,10 +483,14 @@ src/
                            error_classifier, shared state
   retrieval/               Chroma vector store + optional Redis cache
   db/executor.py           SQLite execution with empty-query guard
+  db/connection.py         read-only connections (mode=ro + query_only)
+  uploads.py               demo SQLite uploads: validation, TTL/cap eviction
+  demo_limits.py           per-session and global daily query caps
 eval/
   run_benchmark.py         benchmark harness (checkpointing + resume)
   metrics.py               execution accuracy (BIRD's EX metric)
   results_500_baseline.csv per-question results and failure taxonomy
+  results_150_with_evidence.csv  evidence-ablation arm (see Results)
 data/build_schema_index.py schema introspection + sample-value extraction
 api/ ui/                   FastAPI backend, Streamlit frontend
 k8s/ terraform/            Kubernetes manifests, AWS Lambda IaC

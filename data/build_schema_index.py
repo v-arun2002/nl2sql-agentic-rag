@@ -14,9 +14,9 @@ per-column when present.
 
 import csv
 import os
-import sqlite3
 
 from src.config import settings
+from src.db.connection import connect_readonly
 from src.retrieval.vector_store import SchemaVectorStore
 
 DB_IDS = [
@@ -83,14 +83,20 @@ def sample_values(cursor, table_name: str, column_name: str) -> list:
     return out
 
 
-def build_tables_dict(db_id: str) -> dict:
-    sqlite_path = f"{settings.benchmark_data_path}/dev_databases/{db_id}/{db_id}.sqlite"
-    conn = sqlite3.connect(sqlite_path)
+def introspect_sqlite(sqlite_path: str, all_descriptions: dict = None) -> dict:
+    """
+    Path-based introspection, so this works for an arbitrary .sqlite file and
+    not only for a BIRD database resolved from a db_id -- which is what the
+    demo's upload feature needs (see src/uploads.py).
+
+    Opened read-only: introspection has no business writing, and an upload is
+    someone else's data.
+    """
+    all_descriptions = all_descriptions or {}
+    conn = connect_readonly(sqlite_path)
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
     table_names = [row[0] for row in cursor.fetchall() if not row[0].startswith("sqlite_")]
-
-    all_descriptions = load_column_descriptions(db_id)
 
     tables = {}
     for table_name in table_names:
@@ -117,6 +123,11 @@ def build_tables_dict(db_id: str) -> dict:
 
 def sqlite_path_for(db_id: str) -> str:
     return f"{settings.benchmark_data_path}/dev_databases/{db_id}/{db_id}.sqlite"
+
+
+def build_tables_dict(db_id: str) -> dict:
+    """BIRD database by db_id, with its shipped column descriptions folded in."""
+    return introspect_sqlite(sqlite_path_for(db_id), load_column_descriptions(db_id))
 
 
 def main():
