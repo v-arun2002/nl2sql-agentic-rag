@@ -1,105 +1,144 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" width="900" height="720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 880" width="940" height="880" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
     </marker>
-    <marker id="arrowCorrect" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <marker id="arwA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#b45309"/>
+    </marker>
+    <marker id="arwB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6366f1"/>
     </marker>
   </defs>
 
-  <rect width="900" height="720" fill="#fbfbfd"/>
+  <rect width="940" height="880" fill="#fbfbfd"/>
 
-  <!-- ===== Interface layer ===== -->
-  <rect x="30" y="24" width="840" height="76" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-  <text x="46" y="46" font-size="11" fill="#64748b" letter-spacing="1.2">INTERFACE</text>
+  <!-- ============ ENTRY ============ -->
+  <rect x="24" y="22" width="892" height="74" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="40" y="43" font-size="10.5" fill="#64748b" letter-spacing="1.3">ENTRY POINTS</text>
 
-  <rect x="120" y="52" width="150" height="34" rx="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
-  <text x="195" y="73" font-size="13" fill="#334155" text-anchor="middle">Streamlit UI</text>
+  <rect x="60" y="50" width="188" height="32" rx="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="154" y="66" font-size="12" fill="#334155" text-anchor="middle">Streamlit UI</text>
+  <text x="154" y="77" font-size="9" fill="#94a3b8" text-anchor="middle">deployed · in-process</text>
 
-  <rect x="320" y="52" width="150" height="34" rx="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
-  <text x="395" y="73" font-size="13" fill="#334155" text-anchor="middle">FastAPI /query</text>
+  <rect x="292" y="50" width="188" height="32" rx="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="386" y="66" font-size="12" fill="#334155" text-anchor="middle">FastAPI POST /query</text>
+  <text x="386" y="77" font-size="9" fill="#94a3b8" text-anchor="middle">local · containerised</text>
 
-  <rect x="520" y="52" width="190" height="34" rx="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
-  <text x="615" y="73" font-size="13" fill="#334155" text-anchor="middle">eval/run_benchmark.py</text>
+  <rect x="524" y="50" width="188" height="32" rx="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="618" y="66" font-size="12" fill="#334155" text-anchor="middle">eval/run_benchmark</text>
+  <text x="618" y="77" font-size="9" fill="#94a3b8" text-anchor="middle">500 questions · resumable</text>
 
-  <line x1="395" y1="100" x2="395" y2="128" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="756" y="50" width="126" height="32" rx="5" fill="#fffbeb" stroke="#d97706" stroke-width="1.2"/>
+  <text x="819" y="66" font-size="11.5" fill="#78350f" text-anchor="middle">demo caps</text>
+  <text x="819" y="77" font-size="9" fill="#92400e" text-anchor="middle">session + daily</text>
 
-  <!-- ===== Pipeline layer ===== -->
-  <rect x="30" y="128" width="840" height="416" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
-  <text x="46" y="150" font-size="11" fill="#64748b" letter-spacing="1.2">LANGGRAPH STATE MACHINE — src/graph.py</text>
+  <line x1="470" y1="96" x2="470" y2="122" stroke="#64748b" stroke-width="1.5" marker-end="url(#arw)"/>
 
-  <!-- Schema Retriever -->
-  <rect x="250" y="166" width="290" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
-  <text x="395" y="187" font-size="14" fill="#0f172a" text-anchor="middle" font-weight="600">Schema Retriever</text>
-  <text x="395" y="205" font-size="11" fill="#64748b" text-anchor="middle">top-k tables + types + sample values</text>
-  <rect x="566" y="180" width="118" height="24" rx="4" fill="#eef2f7" stroke="#cbd5e1"/>
-  <text x="625" y="196" font-size="10.5" fill="#475569" text-anchor="middle">Chroma + MiniLM</text>
+  <!-- ============ PIPELINE BAND ============ -->
+  <rect x="24" y="122" width="892" height="452" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="40" y="143" font-size="10.5" fill="#64748b" letter-spacing="1.3">LANGGRAPH STATE MACHINE — src/graph.py</text>
 
-  <line x1="395" y1="218" x2="395" y2="248" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <!-- LEFT: stores -->
+  <text x="46" y="176" font-size="9.5" fill="#6366f1" letter-spacing="1.1">DATA</text>
 
-  <!-- Query Planner -->
-  <rect x="250" y="248" width="290" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
-  <text x="395" y="269" font-size="14" fill="#0f172a" text-anchor="middle" font-weight="600">Query Planner</text>
-  <text x="395" y="287" font-size="11" fill="#64748b" text-anchor="middle">structured plan: tables, joins, filters, aggregation</text>
-  <rect x="566" y="262" width="118" height="24" rx="4" fill="#eef2f7" stroke="#cbd5e1"/>
-  <text x="625" y="278" font-size="10.5" fill="#475569" text-anchor="middle">OpenAI gpt-5-mini</text>
+  <rect x="42" y="186" width="176" height="46" rx="6" fill="#eef2ff" stroke="#6366f1" stroke-width="1.2"/>
+  <text x="130" y="204" font-size="11.5" fill="#3730a3" text-anchor="middle" font-weight="600">Chroma — shipped</text>
+  <text x="130" y="218" font-size="9" fill="#4f46e5" text-anchor="middle">6 databases · committed</text>
+  <text x="130" y="228" font-size="9" fill="#4f46e5" text-anchor="middle">types + real sample values</text>
 
-  <line x1="395" y1="300" x2="395" y2="330" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="42" y="242" width="176" height="46" rx="6" fill="#eef2ff" stroke="#6366f1" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <text x="130" y="260" font-size="11.5" fill="#3730a3" text-anchor="middle" font-weight="600">Chroma — uploads</text>
+  <text x="130" y="274" font-size="9" fill="#4f46e5" text-anchor="middle">separate store · gitignored</text>
+  <text x="130" y="284" font-size="9" fill="#4f46e5" text-anchor="middle">session-scoped · auto-evicted</text>
 
-  <!-- SQL Generator -->
-  <rect x="250" y="330" width="290" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
-  <text x="395" y="351" font-size="14" fill="#0f172a" text-anchor="middle" font-weight="600">SQL Generator</text>
-  <text x="395" y="369" font-size="11" fill="#64748b" text-anchor="middle">plan + schema → SQLite query</text>
-  <rect x="566" y="344" width="118" height="24" rx="4" fill="#eef2f7" stroke="#cbd5e1"/>
-  <text x="625" y="360" font-size="10.5" fill="#475569" text-anchor="middle">OpenAI gpt-5-mini</text>
+  <line x1="218" y1="212" x2="274" y2="212" stroke="#6366f1" stroke-width="1.4" marker-end="url(#arwB)"/>
+  <path d="M 218 265 L 246 265 L 246 216 L 274 216" fill="none" stroke="#6366f1" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#arwB)"/>
 
-  <line x1="395" y1="382" x2="395" y2="412" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="42" y="404" width="176" height="52" rx="6" fill="#eef2ff" stroke="#6366f1" stroke-width="1.2"/>
+  <text x="130" y="422" font-size="11.5" fill="#3730a3" text-anchor="middle" font-weight="600">SQLite files</text>
+  <text x="130" y="436" font-size="9" fill="#4f46e5" text-anchor="middle">shipped + uploaded (max 50MB)</text>
+  <text x="130" y="448" font-size="9" fill="#b45309" text-anchor="middle" font-weight="600">mode=ro + PRAGMA query_only</text>
+  <line x1="218" y1="430" x2="274" y2="430" stroke="#6366f1" stroke-width="1.4" marker-end="url(#arwB)"/>
 
-  <!-- Executor -->
-  <rect x="250" y="412" width="290" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
-  <text x="395" y="433" font-size="14" fill="#0f172a" text-anchor="middle" font-weight="600">Executor</text>
-  <text x="395" y="451" font-size="11" fill="#64748b" text-anchor="middle">runs query, guards against empty SQL</text>
-  <rect x="566" y="426" width="118" height="24" rx="4" fill="#eef2f7" stroke="#cbd5e1"/>
-  <text x="625" y="442" font-size="10.5" fill="#475569" text-anchor="middle">SQLite</text>
+  <!-- CENTER: agents -->
+  <rect x="278" y="186" width="330" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
+  <text x="443" y="206" font-size="13.5" fill="#0f172a" text-anchor="middle" font-weight="600">1 · Schema Retriever</text>
+  <text x="443" y="224" font-size="10" fill="#64748b" text-anchor="middle">semantic search → top-6 tables (top-10 on retry)</text>
+  <line x1="443" y1="238" x2="443" y2="262" stroke="#64748b" stroke-width="1.5" marker-end="url(#arw)"/>
 
-  <!-- success -->
-  <line x1="540" y1="438" x2="770" y2="438" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="700" y="430" font-size="11" fill="#475569" text-anchor="middle">success</text>
-  <rect x="772" y="424" width="72" height="28" rx="5" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
-  <text x="808" y="443" font-size="12" fill="#166534" text-anchor="middle">result</text>
+  <rect x="278" y="262" width="330" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
+  <text x="443" y="282" font-size="13.5" fill="#0f172a" text-anchor="middle" font-weight="600">2 · Query Planner</text>
+  <text x="443" y="300" font-size="10" fill="#64748b" text-anchor="middle">structured plan: tables · joins · filters · aggregation</text>
+  <line x1="443" y1="314" x2="443" y2="338" stroke="#64748b" stroke-width="1.5" marker-end="url(#arw)"/>
 
-  <!-- failure down to classifier -->
-  <line x1="395" y1="464" x2="395" y2="490" stroke="#b45309" stroke-width="1.5" marker-end="url(#arrowCorrect)"/>
-  <text x="440" y="482" font-size="11" fill="#b45309" text-anchor="middle">failure</text>
+  <rect x="278" y="338" width="330" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
+  <text x="443" y="358" font-size="13.5" fill="#0f172a" text-anchor="middle" font-weight="600">3 · SQL Generator</text>
+  <text x="443" y="376" font-size="10" fill="#64748b" text-anchor="middle">plan + schema → SQLite query</text>
+  <line x1="443" y1="390" x2="443" y2="414" stroke="#64748b" stroke-width="1.5" marker-end="url(#arw)"/>
 
-  <!-- Error Classifier -->
-  <rect x="250" y="490" width="290" height="44" rx="6" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
-  <text x="395" y="509" font-size="14" fill="#78350f" text-anchor="middle" font-weight="600">Error Classifier</text>
-  <text x="395" y="525" font-size="11" fill="#92400e" text-anchor="middle">rule-based first, LLM fallback · Groq llama-3.1-8b</text>
+  <rect x="278" y="414" width="330" height="52" rx="6" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
+  <text x="443" y="434" font-size="13.5" fill="#0f172a" text-anchor="middle" font-weight="600">4 · Executor</text>
+  <text x="443" y="452" font-size="10" fill="#64748b" text-anchor="middle">runs query · rejects empty SQL as explicit failure</text>
 
-  <!-- ===== Correction routing ===== -->
-  <rect x="30" y="562" width="840" height="82" rx="8" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
-  <text x="46" y="584" font-size="11" fill="#b45309" letter-spacing="1.2">CORRECTION ROUTING — the diagnosis decides the destination</text>
+  <path d="M 608 440 L 700 440 L 700 496 L 762 496" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arw)"/>
+  <text x="668" y="433" font-size="10" fill="#475569">success</text>
+  <rect x="764" y="480" width="118" height="32" rx="5" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+  <text x="823" y="500" font-size="11.5" fill="#166534" text-anchor="middle">rows + trace</text>
 
-  <rect x="70" y="596" width="240" height="34" rx="5" fill="#ffffff" stroke="#d97706" stroke-width="1.2"/>
-  <text x="190" y="617" font-size="12" fill="#78350f" text-anchor="middle">SCHEMA_ERROR → Retriever</text>
+  <line x1="443" y1="466" x2="443" y2="492" stroke="#b45309" stroke-width="1.5" marker-end="url(#arwA)"/>
+  <text x="484" y="484" font-size="10" fill="#b45309">failure</text>
 
-  <rect x="330" y="596" width="240" height="34" rx="5" fill="#ffffff" stroke="#d97706" stroke-width="1.2"/>
-  <text x="450" y="617" font-size="12" fill="#78350f" text-anchor="middle">SYNTAX_ERROR → Generator</text>
+  <rect x="278" y="492" width="330" height="48" rx="6" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
+  <text x="443" y="512" font-size="13.5" fill="#78350f" text-anchor="middle" font-weight="600">5 · Error Classifier</text>
+  <text x="443" y="529" font-size="10" fill="#92400e" text-anchor="middle">rule-based first · LLM only for ambiguous cases</text>
 
-  <rect x="590" y="596" width="240" height="34" rx="5" fill="#ffffff" stroke="#d97706" stroke-width="1.2"/>
-  <text x="710" y="617" font-size="12" fill="#78350f" text-anchor="middle">LOGIC_ERROR → Planner</text>
+  <!-- RIGHT: providers -->
+  <text x="648" y="176" font-size="9.5" fill="#64748b" letter-spacing="1.1">MODEL PER ROLE</text>
 
-  <!-- classifier down to routing band -->
-  <line x1="395" y1="534" x2="395" y2="558" stroke="#b45309" stroke-width="1.5" marker-end="url(#arrowCorrect)"/>
+  <rect x="644" y="196" width="238" height="30" rx="4" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="763" y="215" font-size="10.5" fill="#475569" text-anchor="middle">ONNX all-MiniLM-L6-v2 · local, no API</text>
 
-  <!-- loop back arrow: from routing band left edge up to retriever -->
-  <path d="M 60 613 L 40 613 L 40 192 L 246 192" fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowCorrect)"/>
-  <text x="120" y="380" font-size="11" fill="#b45309" transform="rotate(-90 120 380)" text-anchor="middle">bounded by MAX_RETRIES</text>
+  <rect x="644" y="272" width="238" height="30" rx="4" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="763" y="291" font-size="10.5" fill="#475569" text-anchor="middle">OpenAI gpt-5-mini · reasoning depth</text>
 
-  <!-- ===== Deployment layer ===== -->
-  <rect x="30" y="660" width="840" height="44" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-  <text x="46" y="678" font-size="11" fill="#64748b" letter-spacing="1.2">DEPLOYMENT</text>
-  <text x="46" y="695" font-size="12" fill="#475569">Docker · docker-compose · Kubernetes manifests · Terraform (AWS Lambda + API Gateway) · GitHub Actions CI</text>
+  <rect x="644" y="348" width="238" height="30" rx="4" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="763" y="367" font-size="10.5" fill="#475569" text-anchor="middle">OpenAI gpt-5-mini · drives accuracy</text>
+
+  <rect x="644" y="498" width="238" height="30" rx="4" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="763" y="517" font-size="10.5" fill="#475569" text-anchor="middle">Groq llama-3.1-8b · cheap, high volume</text>
+
+  <text x="644" y="551" font-size="9.5" fill="#94a3b8">Set independently in src/config.py — swapping a provider is config, not code.</text>
+
+  <!-- ============ ROUTING ============ -->
+  <rect x="24" y="592" width="892" height="98" rx="8" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="40" y="613" font-size="10.5" fill="#b45309" letter-spacing="1.3">CORRECTION ROUTING — the diagnosis decides the destination</text>
+
+  <rect x="52" y="626" width="196" height="34" rx="5" fill="#ffffff" stroke="#d97706" stroke-width="1.2"/>
+  <text x="150" y="648" font-size="11.5" fill="#78350f" text-anchor="middle">SCHEMA_ERROR → 1</text>
+
+  <rect x="268" y="626" width="196" height="34" rx="5" fill="#ffffff" stroke="#d97706" stroke-width="1.2"/>
+  <text x="366" y="648" font-size="11.5" fill="#78350f" text-anchor="middle">LOGIC_ERROR → 2</text>
+
+  <rect x="484" y="626" width="196" height="34" rx="5" fill="#ffffff" stroke="#d97706" stroke-width="1.2"/>
+  <text x="582" y="648" font-size="11.5" fill="#78350f" text-anchor="middle">SYNTAX_ERROR → 3</text>
+
+  <rect x="700" y="626" width="196" height="34" rx="5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+  <text x="798" y="648" font-size="11.5" fill="#64748b" text-anchor="middle">TIMEOUT / UNKNOWN → end</text>
+
+  <text x="52" y="678" font-size="9.5" fill="#92400e">Unactionable classes end rather than retry blindly. Loop bounded by MAX_RETRIES.</text>
+
+  <line x1="443" y1="540" x2="443" y2="588" stroke="#b45309" stroke-width="1.5" marker-end="url(#arwA)"/>
+  <path d="M 44 643 L 32 643 L 32 212 L 274 212" fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arwA)"/>
+
+  <!-- ============ OPS ============ -->
+  <rect x="24" y="706" width="892" height="66" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="40" y="727" font-size="10.5" fill="#64748b" letter-spacing="1.3">OPS</text>
+  <text x="40" y="746" font-size="11" fill="#475569">Docker · Kubernetes (validated on kind) · Terraform (AWS Lambda) · GitHub Actions — free unit tests per push, live regression manual</text>
+  <text x="40" y="762" font-size="11" fill="#475569">Deployed on Streamlit Community Cloud (~1GB) — the ONNX embedder rather than PyTorch is what makes that fit</text>
+
+  <!-- ============ RESULT ============ -->
+  <text x="24" y="806" font-size="13" fill="#0f172a" font-weight="600">44.20% execution accuracy — BIRD-SQL Mini-Dev, 500 questions, schema-only</text>
+  <text x="24" y="826" font-size="11" fill="#64748b">simple 61.5% · moderate 41.6% · challenging 25.5%   |   ablation with domain hints: 44.0% → 52.7% on a 150-question slice (McNemar p = 0.007)</text>
+  <text x="24" y="846" font-size="11" fill="#94a3b8">Accuracy tracks semantic clarity, not schema size: the 199-column database scores 56.9%, an 89-column one scores 16.7%.</text>
 </svg>
