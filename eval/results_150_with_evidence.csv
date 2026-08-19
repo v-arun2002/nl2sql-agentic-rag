@@ -1,0 +1,811 @@
+index,question_id,db_id,question,evidence,gold_sql,predicted_sql,correct,difficulty,retries,error_classes_hit,fatal_error,schema_context_chars,seconds
+0,1471,debit_card_specializing,What is the ratio of customers who pay in EUR against customers who pay in CZK?,ratio of customers who pay in EUR against customers who pay in CZK = count(Currency = 'EUR') / count(Currency = 'CZK').,"SELECT CAST(SUM(IIF(Currency = 'EUR', 1, 0)) AS FLOAT) / SUM(IIF(Currency = 'CZK', 1, 0)) AS ratio FROM customers","SELECT CASE WHEN SUM(CASE WHEN Currency='CZK' THEN 1 ELSE 0 END)=0 THEN NULL ELSE 1.0*SUM(CASE WHEN Currency='EUR' THEN 1 ELSE 0 END)/SUM(CASE WHEN Currency='CZK' THEN 1 ELSE 0 END) END FROM customers WHERE Currency IN ('EUR','CZK');",True,simple,0,,,1675,17.9
+1,1472,debit_card_specializing,"In 2012, who had the least consumption in LAM?",Year 2012 can be presented as Between 201201 And 201212; The first 4 strings of the Date values in the yearmonth table can represent year.,"SELECT T1.CustomerID FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE T1.Segment = 'LAM' AND SUBSTR(T2.Date, 1, 4) = '2012' GROUP BY T1.CustomerID ORDER BY SUM(T2.Consumption) ASC LIMIT 1","SELECT customers.CustomerID
+FROM yearmonth
+JOIN customers ON yearmonth.CustomerID = customers.CustomerID
+WHERE customers.Segment = 'LAM'
+  AND yearmonth.Date BETWEEN '201201' AND '201212'
+GROUP BY customers.CustomerID
+ORDER BY SUM(yearmonth.Consumption) ASC
+LIMIT 1;",True,moderate,0,,,1675,17.9
+2,1473,debit_card_specializing,What was the average monthly consumption of customers in SME for the year 2013?,Average Monthly consumption = AVG(Consumption) / 12; Year 2013 can be presented as Between 201301 And 201312; The first 4 strings of the Date values in the yearmonth table can represent year.,"SELECT AVG(T2.Consumption) / 12 FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE SUBSTR(T2.Date, 1, 4) = '2013' AND T1.Segment = 'SME'","SELECT AVG(yearmonth.Consumption)/12
+FROM yearmonth
+JOIN customers ON yearmonth.CustomerID = customers.CustomerID
+WHERE customers.Segment = 'SME'
+  AND yearmonth.Date BETWEEN '201301' AND '201312'
+  AND yearmonth.Consumption IS NOT NULL;",True,moderate,0,,,1675,21.4
+3,1476,debit_card_specializing,What was the difference in gas consumption between CZK-paying customers and EUR-paying customers in 2012?,Year 2012 can be presented as Between 201201 And 201212; The first 4 strings of the Date values in the yearmonth table can represent year; Difference in Consumption = CZK customers consumption in 2012 - EUR customers consumption in 2012,"SELECT SUM(IIF(T1.Currency = 'CZK', T2.Consumption, 0)) - SUM(IIF(T1.Currency = 'EUR', T2.Consumption, 0)) FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE SUBSTR(T2.Date, 1, 4) = '2012'","SELECT (COALESCE(SUM(CASE WHEN customers.Currency='CZK' THEN yearmonth.Consumption END),0) - COALESCE(SUM(CASE WHEN customers.Currency='EUR' THEN yearmonth.Consumption END),0)) AS Difference
+FROM yearmonth
+JOIN customers ON yearmonth.CustomerID = customers.CustomerID
+WHERE yearmonth.Date BETWEEN '201201' AND '201212'
+  AND customers.Currency IN ('CZK','EUR');",True,challenging,0,,,1675,18.6
+4,1479,debit_card_specializing,Which year recorded the most consumption of gas paid in CZK?,The first 4 strings of the Date values in the yearmonth table can represent year.,"SELECT SUBSTR(T2.Date, 1, 4) FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE T1.Currency = 'CZK' GROUP BY SUBSTR(T2.Date, 1, 4) ORDER BY SUM(T2.Consumption) DESC LIMIT 1","SELECT strftime('%Y', transactions_1k.Date) AS year
+FROM transactions_1k
+JOIN products ON transactions_1k.ProductID = products.ProductID
+JOIN customers ON transactions_1k.CustomerID = customers.CustomerID
+WHERE customers.Currency = 'CZK'
+  AND (
+    lower(products.Description) = 'nafta'
+    OR lower(products.Description) LIKE '%gas%'
+  )
+GROUP BY strftime('%Y', transactions_1k.Date)
+ORDER BY SUM(transactions_1k.Amount) DESC
+LIMIT 1;",False,moderate,0,,,1675,30.9
+5,1480,debit_card_specializing,What was the gas consumption peak month for SME customers in 2013?,Year 2013 can be presented as Between 201301 And 201312; The first 4 strings of the Date values in the yearmonth table can represent year; The 5th and 6th string of the date can refer to month.,"SELECT SUBSTR(T2.Date, 5, 2) FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE SUBSTR(T2.Date, 1, 4) = '2013' AND T1.Segment = 'SME' GROUP BY SUBSTR(T2.Date, 5, 2) ORDER BY SUM(T2.Consumption) DESC LIMIT 1","SELECT yearmonth.Date
+FROM yearmonth
+JOIN customers ON yearmonth.CustomerID = customers.CustomerID
+WHERE customers.Segment = 'SME'
+  AND yearmonth.Date BETWEEN '201301' AND '201312'
+GROUP BY yearmonth.Date
+ORDER BY SUM(Consumption) DESC
+LIMIT 1;",False,moderate,0,,,1675,17.0
+6,1481,debit_card_specializing,"What is the difference in the annual average consumption of the customers with the least amount of consumption paid in CZK for 2013 between SME and LAM, LAM and KAM, and KAM and SME?",annual average consumption of customer with the lowest consumption in each segment = total consumption per year / the number of customer with lowest consumption in each segment; Difference in annual average = SME's annual average - LAM's annual average; Difference in annual average = LAM's annual average - KAM's annual average; Year 2013 can be presented as Between 201301 And 201312; The first 4 strings of the Date values in the yearmonth table can represent year.,"SELECT CAST(SUM(IIF(T1.Segment = 'SME', T2.Consumption, 0)) AS REAL) / COUNT(T1.CustomerID) - CAST(SUM(IIF(T1.Segment = 'LAM', T2.Consumption, 0)) AS REAL) / COUNT(T1.CustomerID) , CAST(SUM(IIF(T1.Segment = 'LAM', T2.Consumption, 0)) AS REAL) / COUNT(T1.CustomerID) - CAST(SUM(IIF(T1.Segment = 'KAM', T2.Consumption, 0)) AS REAL) / COUNT(T1.CustomerID) , CAST(SUM(IIF(T1.Segment = 'KAM', T2.Consumption, 0)) AS REAL) / COUNT(T1.CustomerID) - CAST(SUM(IIF(T1.Segment = 'SME', T2.Consumption, 0)) AS REAL) / COUNT(T1.CustomerID) FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE T1.Currency = 'CZK' AND T2.Consumption = ( SELECT MIN(Consumption) FROM yearmonth ) AND T2.Date BETWEEN 201301 AND 201312","WITH cust_sum AS (
+  SELECT c.Segment, y.CustomerID, SUM(y.Consumption) AS annual_consumption
+  FROM yearmonth y
+  JOIN customers c ON y.CustomerID = c.CustomerID
+  WHERE y.Date BETWEEN '201301' AND '201312'
+    AND c.Currency = 'CZK'
+    AND c.Segment IN ('SME','LAM','KAM')
+  GROUP BY c.Segment, y.CustomerID
+),
+seg_min AS (
+  SELECT Segment, MIN(annual_consumption) AS min_consumption
+  FROM cust_sum
+  GROUP BY Segment
+),
+seg_avg_min AS (
+  SELECT cs.Segment, AVG(cs.annual_consumption) AS avg_of_min
+  FROM cust_sum cs
+  JOIN seg_min sm ON cs.Segment = sm.Segment AND cs.annual_consumption = sm.min_consumption
+  GROUP BY cs.Segment
+)
+SELECT
+  ( (SELECT avg_of_min FROM seg_avg_min WHERE Segment = 'SME') - (SELECT avg_of_min FROM seg_avg_min WHERE Segment = 'LAM') ) AS SME_minus_LAM,
+  ( (SELECT avg_of_min FROM seg_avg_min WHERE Segment = 'LAM') - (SELECT avg_of_min FROM seg_avg_min WHERE Segment = 'KAM') ) AS LAM_minus_KAM,
+  ( (SELECT avg_of_min FROM seg_avg_min WHERE Segment = 'KAM') - (SELECT avg_of_min FROM seg_avg_min WHERE Segment = 'SME') ) AS KAM_minus_SME;",False,challenging,0,,,1675,28.8
+7,1482,debit_card_specializing,"Which of the three segments—SME, LAM and KAM—has the biggest and lowest percentage increases in consumption paid in EUR between 2012 and 2013?",Increase or Decrease = consumption for 2013 - consumption for 2012; Percentage of Increase = (Increase or Decrease / consumption for 2013) * 100%; The first 4 strings of the Date values in the yearmonth table can represent year,"SELECT CAST((SUM(IIF(T1.Segment = 'SME' AND T2.Date LIKE '2013%', T2.Consumption, 0)) - SUM(IIF(T1.Segment = 'SME' AND T2.Date LIKE '2012%', T2.Consumption, 0))) AS FLOAT) * 100 / SUM(IIF(T1.Segment = 'SME' AND T2.Date LIKE '2012%', T2.Consumption, 0)), CAST(SUM(IIF(T1.Segment = 'LAM' AND T2.Date LIKE '2013%', T2.Consumption, 0)) - SUM(IIF(T1.Segment = 'LAM' AND T2.Date LIKE '2012%', T2.Consumption, 0)) AS FLOAT) * 100 / SUM(IIF(T1.Segment = 'LAM' AND T2.Date LIKE '2012%', T2.Consumption, 0)) , CAST(SUM(IIF(T1.Segment = 'KAM' AND T2.Date LIKE '2013%', T2.Consumption, 0)) - SUM(IIF(T1.Segment = 'KAM' AND T2.Date LIKE '2012%', T2.Consumption, 0)) AS FLOAT) * 100 / SUM(IIF(T1.Segment = 'KAM' AND T2.Date LIKE '2012%', T2.Consumption, 0)) FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID","WITH per AS (
+  SELECT c.Segment AS Segment,
+         SUM(CASE WHEN SUBSTR(y.Date,1,4)='2012' THEN y.Consumption ELSE 0 END) AS s2012,
+         SUM(CASE WHEN SUBSTR(y.Date,1,4)='2013' THEN y.Consumption ELSE 0 END) AS s2013
+  FROM yearmonth y
+  JOIN customers c ON y.CustomerID = c.CustomerID
+  WHERE SUBSTR(y.Date,1,4) IN ('2012','2013')
+    AND c.Currency = 'EUR'
+    AND c.Segment IN ('SME','LAM','KAM')
+  GROUP BY c.Segment
+),
+agg AS (
+  SELECT Segment,
+         s2012,
+         s2013,
+         CASE WHEN s2013 = 0 THEN NULL ELSE (s2013 - s2012) / s2013 * 100.0 END AS percentage
+  FROM per
+)
+SELECT
+  (SELECT Segment FROM agg WHERE percentage IS NOT NULL ORDER BY percentage DESC LIMIT 1) AS biggest,
+  (SELECT Segment FROM agg WHERE percentage IS NOT NULL ORDER BY percentage ASC LIMIT 1) AS lowest;",False,challenging,0,,,1675,40.2
+8,1483,debit_card_specializing,How much did customer 6 consume in total between August and November 2013?,Between August And November 2013 refers to Between 201308 And 201311; The first 4 strings of the Date values in the yearmonth table can represent year; The 5th and 6th string of the date can refer to month.,SELECT SUM(Consumption) FROM yearmonth WHERE CustomerID = 6 AND Date BETWEEN '201308' AND '201311',SELECT SUM(Consumption) FROM yearmonth WHERE CustomerID = 6 AND Date >= '201308' AND Date <= '201311';,True,simple,0,,,1675,14.9
+9,1484,debit_card_specializing,"How many more ""discount"" gas stations does the Czech Republic have compared to Slovakia?","Czech Republic can be represented as the Country value in gasstations table is 'CZE'; Slovakia can be represented as the Country value in the gasstations table is 'SVK';  Computation of more ""discount"" gas stations= Total no. of discount gas stations in Czech Republic - Total no. of discount gas stations in Slovakia","SELECT SUM(IIF(Country = 'CZE', 1, 0)) - SUM(IIF(Country = 'SVK', 1, 0)) FROM gasstations WHERE Segment = 'Discount'","SELECT COALESCE(SUM(CASE WHEN Country='CZE' THEN 1 ELSE 0 END),0) - COALESCE(SUM(CASE WHEN Country='SVK' THEN 1 ELSE 0 END),0) AS difference
+FROM gasstations
+WHERE Segment = 'discount' AND Country IN ('CZE','SVK');",False,simple,0,,,1675,16.9
+10,1486,debit_card_specializing,"Is it true that more SMEs pay in Czech koruna than in euros? If so, how many more?",Amount of more SMEs = Total of SMEs pay using Currency CZK - Total of SMEs pay using Currency EUR,SELECT SUM(Currency = 'CZK') - SUM(Currency = 'EUR') FROM customers WHERE Segment = 'SME',"SELECT
+  CASE WHEN (SELECT COUNT(CustomerID) FROM customers WHERE Segment='SME' AND Currency='CZK') >
+            (SELECT COUNT(CustomerID) FROM customers WHERE Segment='SME' AND Currency='EUR')
+       THEN 1 ELSE 0 END AS more_czk,
+  (SELECT COUNT(CustomerID) FROM customers WHERE Segment='SME' AND Currency='CZK')
+  - (SELECT COUNT(CustomerID) FROM customers WHERE Segment='SME' AND Currency='EUR') AS more_count;",False,simple,0,,,1675,23.8
+11,1490,debit_card_specializing,How many percent of LAM customer consumed more than 46.73?,Percentage of LAM customer consumed more than 46.73 = (Total no. of LAM customers who consumed more than 46.73 / Total no. of LAM customers) * 100.,"SELECT CAST(SUM(IIF(T2.Consumption > 46.73, 1, 0)) AS FLOAT) * 100 / COUNT(T1.CustomerID) FROM customers AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE T1.Segment = 'LAM'",SELECT CASE WHEN (SELECT COUNT(DISTINCT CustomerID) FROM customers WHERE Segment='LAM')=0 THEN 0.0 ELSE (SELECT COUNT(DISTINCT ym.CustomerID) FROM yearmonth ym JOIN customers c ON c.CustomerID = ym.CustomerID WHERE c.Segment='LAM' AND ym.Consumption > 46.73)*100.0 / (SELECT COUNT(DISTINCT CustomerID) FROM customers WHERE Segment='LAM') END;,False,moderate,0,,,1675,23.7
+12,1493,debit_card_specializing,"In February 2012, what percentage of customers consumed more than 528.3?",February 2012 refers to '201202' in yearmonth.date; The first 4 strings of the Date values in the yearmonth table can represent year; The 5th and 6th string of the date can refer to month.,"SELECT CAST(SUM(IIF(Consumption > 528.3, 1, 0)) AS FLOAT) * 100 / COUNT(CustomerID) FROM yearmonth WHERE Date = '201202'","SELECT 100.0 * SUM(CASE WHEN m.Consumption > 528.3 THEN 1 ELSE 0 END) / COUNT(*) AS percentage
+FROM (
+  SELECT CustomerID, MAX(Consumption) AS Consumption
+  FROM yearmonth
+  WHERE Date = '201202'
+  GROUP BY CustomerID
+) m;",True,simple,0,,,1675,18.2
+13,1498,debit_card_specializing,What is the highest monthly consumption in the year 2012?,The first 4 strings of the Date values in the yearmonth table can represent year; The 5th and 6th string of the date can refer to month.,"SELECT SUM(Consumption) FROM yearmonth WHERE SUBSTR(Date, 1, 4) = '2012' GROUP BY SUBSTR(Date, 5, 2) ORDER BY SUM(Consumption) DESC LIMIT 1","SELECT SUM(Consumption) FROM yearmonth WHERE SUBSTR(Date,1,4) = '2012' AND Consumption IS NOT NULL GROUP BY Date ORDER BY SUM(Consumption) DESC LIMIT 1;",True,simple,0,,,1675,22.3
+14,1500,debit_card_specializing,"Please list the product description of the products consumed in September, 2013.",September 2013 refers to 201309; The first 4 strings of the Date values in the yearmonth table can represent year; The 5th and 6th string of the date can refer to month.,SELECT T3.Description FROM transactions_1k AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID INNER JOIN products AS T3 ON T1.ProductID = T3.ProductID WHERE T2.Date = '201309',"SELECT products.Description
+FROM transactions_1k
+JOIN products ON transactions_1k.ProductID = products.ProductID
+WHERE transactions_1k.Date BETWEEN '2013-09-01' AND '2013-09-30'
+GROUP BY products.Description
+ORDER BY products.Description ASC;",False,simple,0,,,1675,15.7
+15,1501,debit_card_specializing,"Please list the countries of the gas stations with transactions taken place in June, 2013.",June 2013 refers to '201306'; The first 4 strings of the Date values in the yearmonth table can represent year; The 5th and 6th string of the date can refer to month;,SELECT DISTINCT T2.Country FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID INNER JOIN yearmonth AS T3 ON T1.CustomerID = T3.CustomerID WHERE T3.Date = '201306',"SELECT gasstations.Country
+FROM transactions_1k
+JOIN gasstations ON transactions_1k.GasStationID = gasstations.GasStationID
+WHERE transactions_1k.Date BETWEEN '2013-06-01' AND '2013-06-30'
+GROUP BY gasstations.Country
+ORDER BY gasstations.Country ASC;",False,moderate,0,,,1675,18.6
+16,1505,debit_card_specializing,"Among the customers who paid in euro, how many of them have a monthly consumption of over 1000?",Pays in euro = Currency = 'EUR'.,SELECT COUNT(*) FROM yearmonth AS T1 INNER JOIN customers AS T2 ON T1.CustomerID = T2.CustomerID WHERE T2.Currency = 'EUR' AND T1.Consumption > 1000.00,SELECT COUNT(DISTINCT customers.CustomerID) FROM customers JOIN yearmonth ON customers.CustomerID = yearmonth.CustomerID WHERE customers.Currency = 'EUR' AND yearmonth.Consumption > 1000;,False,simple,0,,,1675,13.7
+17,1506,debit_card_specializing,Please list the product descriptions of the transactions taken place in the gas stations in the Czech Republic.,Czech Republic can be represented as the Country value in the gasstations table is 'CZE'; ,SELECT DISTINCT T3.Description FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID INNER JOIN products AS T3 ON T1.ProductID = T3.ProductID WHERE T2.Country = 'CZE',"SELECT products.Description
+FROM transactions_1k
+JOIN gasstations ON transactions_1k.GasStationID = gasstations.GasStationID
+JOIN products ON transactions_1k.ProductID = products.ProductID
+WHERE gasstations.Country = 'CZE'
+GROUP BY products.Description
+ORDER BY products.Description ASC;",True,moderate,0,,,1675,12.9
+18,1507,debit_card_specializing,Please list the disparate time of the transactions taken place in the gas stations from chain no. 11.,,SELECT DISTINCT T1.Time FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID WHERE T2.ChainID = 11,"SELECT transactions_1k.Time
+FROM gasstations
+JOIN transactions_1k ON gasstations.GasStationID = transactions_1k.GasStationID
+WHERE gasstations.ChainID = 11
+  AND transactions_1k.Time IS NOT NULL
+GROUP BY transactions_1k.Time
+ORDER BY transactions_1k.Time ASC;",True,simple,0,,,1675,12.8
+19,1509,debit_card_specializing,"Among the transactions made in the gas stations in the Czech Republic, how many of them are taken place after 2012/1/1?",Czech Republic can be represented as the Country value in the gasstations table is 'CZE',"SELECT COUNT(T1.TransactionID) FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID WHERE T2.Country = 'CZE' AND STRFTIME('%Y', T1.Date) >= '2012'",SELECT COUNT(transactions_1k.TransactionID) FROM transactions_1k JOIN gasstations ON transactions_1k.GasStationID = gasstations.GasStationID WHERE transactions_1k.Date > '2012-01-01' AND gasstations.Country = 'CZE';,True,moderate,0,,,1675,13.2
+20,1514,debit_card_specializing,What kind of currency did the customer paid at 16:25:00 in 2012/8/24?,'2012/8/24' can be represented by '2012-08-24'; ,SELECT DISTINCT T3.Currency FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID INNER JOIN customers AS T3 ON T1.CustomerID = T3.CustomerID WHERE T1.Date = '2012-08-24' AND T1.Time = '16:25:00',"SELECT customers.Currency
+FROM transactions_1k
+JOIN customers ON transactions_1k.CustomerID = customers.CustomerID
+WHERE transactions_1k.Date = '2012-08-24'
+  AND transactions_1k.Time = '16:25:00';",False,simple,0,,,1675,13.9
+21,1515,debit_card_specializing,What segment did the customer have at 2012/8/23 21:20:00?,'2012/8/23' can be represented by '2012-08-23',SELECT T2.Segment FROM transactions_1k AS T1 INNER JOIN customers AS T2 ON T1.CustomerID = T2.CustomerID WHERE T1.date = '2012-08-23' AND T1.time = '21:20:00',"SELECT customers.Segment
+FROM transactions_1k
+JOIN customers ON transactions_1k.CustomerID = customers.CustomerID
+WHERE transactions_1k.Date = '2012-08-23' AND transactions_1k.Time = '21:20:00';",True,simple,0,,,1675,12.6
+22,1521,debit_card_specializing,"For all the transactions happened during 8:00-9:00 in 2012/8/26, how many happened in CZE?",Czech Republic can be represented as the Country value in the gasstations table is 'CZE'; '2012/8/26' can be represented by '2012-08-26'; during 8:00-9:00 can be represented as Time BETWEEN '08:00:00' AND '09:00:00',SELECT COUNT(T1.TransactionID) FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID WHERE T1.Date = '2012-08-26' AND T1.Time BETWEEN '08:00:00' AND '09:00:00' AND T2.Country = 'CZE',SELECT COUNT(*) FROM transactions_1k JOIN gasstations ON transactions_1k.GasStationID = gasstations.GasStationID WHERE transactions_1k.Date = '2012-08-26' AND transactions_1k.Time BETWEEN '08:00:00' AND '09:00:00' AND gasstations.Country = 'CZE';,True,moderate,0,,,1675,13.2
+23,1524,debit_card_specializing,What's the nationality of the customer who spent 548.4 in 2012/8/24?,'2012/8/24' can be represented by '2012-08-24',SELECT T2.Country FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID WHERE T1.Date = '2012-08-24' AND T1.Price  = 548.4,"SELECT DISTINCT gasstations.Country
+FROM transactions_1k
+JOIN gasstations ON transactions_1k.GasStationID = gasstations.GasStationID
+WHERE transactions_1k.Date = '2012-08-24'
+  AND ABS(transactions_1k.Amount * transactions_1k.Price - 548.4) < 0.01;",False,simple,0,,,1675,15.0
+24,1525,debit_card_specializing,What is the percentage of the customers who used EUR in 2012/8/25?,'2012/8/25' can be represented by '2012-08-25',"SELECT CAST(SUM(IIF(T2.Currency = 'EUR', 1, 0)) AS FLOAT) * 100 / COUNT(T1.CustomerID) FROM transactions_1k AS T1 INNER JOIN customers AS T2 ON T1.CustomerID = T2.CustomerID WHERE T1.Date = '2012-08-25'","SELECT CASE WHEN denom = 0 THEN 0 ELSE (num * 100.0) / denom END AS percentage
+FROM (
+  SELECT
+    COUNT(DISTINCT CASE WHEN customers.Currency = 'EUR' THEN customers.CustomerID END) AS num,
+    COUNT(DISTINCT customers.CustomerID) AS denom
+  FROM customers
+  JOIN transactions_1k ON customers.CustomerID = transactions_1k.CustomerID
+  WHERE transactions_1k.Date = '2012-08-25'
+);",False,simple,0,,,1675,19.5
+25,1526,debit_card_specializing,"For the customer who paid 634.8 in 2012/8/25, what was the consumption decrease rate from Year 2012 to 2013?",'2012/8/24' can be represented by '2012-08-24'; Consumption decrease rate = (consumption_2012 - consumption_2013) / consumption_2012,"SELECT CAST(SUM(IIF(SUBSTRING(Date, 1, 4) = '2012', Consumption, 0)) - SUM(IIF(SUBSTRING(Date, 1, 4) = '2013', Consumption, 0)) AS FLOAT) / SUM(IIF(SUBSTRING(Date, 1, 4) = '2012', Consumption, 0)) FROM yearmonth WHERE CustomerID = ( SELECT T1.CustomerID FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID WHERE T1.Date = '2012-08-25' AND T1.Price  = 1513.12 )",SELECT CASE WHEN SUM(CASE WHEN yearmonth.Date BETWEEN '201201' AND '201212' THEN yearmonth.Consumption ELSE 0 END)=0 THEN NULL ELSE (SUM(CASE WHEN yearmonth.Date BETWEEN '201201' AND '201212' THEN yearmonth.Consumption ELSE 0 END) - SUM(CASE WHEN yearmonth.Date BETWEEN '201301' AND '201312' THEN yearmonth.Consumption ELSE 0 END)) / SUM(CASE WHEN yearmonth.Date BETWEEN '201201' AND '201212' THEN yearmonth.Consumption ELSE 0 END) END AS decrease_rate FROM yearmonth JOIN (SELECT DISTINCT CustomerID FROM transactions_1k WHERE Date = '2012-08-25' AND Amount * Price = 634.8) t ON yearmonth.CustomerID = t.CustomerID GROUP BY yearmonth.CustomerID;,False,challenging,0,,,1675,31.2
+26,1528,debit_card_specializing,"What is the percentage of ""premium"" against the overall segment in Country = ""SVK""?",,"SELECT CAST(SUM(IIF(Country = 'SVK' AND Segment = 'Premium', 1, 0)) AS FLOAT) * 100 / SUM(IIF(Country = 'SVK', 1, 0)) FROM gasstations","SELECT CASE WHEN SUM(t.Amount * t.Price)=0 THEN 0.0 ELSE 100.0 * SUM(CASE WHEN g.Segment='Premium' THEN t.Amount * t.Price ELSE 0 END) / SUM(t.Amount * t.Price) END AS percentage
+FROM transactions_1k t
+JOIN gasstations g ON t.GasStationID = g.GasStationID
+WHERE g.Country = 'SVK';",False,simple,0,,,1675,19.3
+27,1529,debit_card_specializing,"What is the amount spent by customer ""38508"" at the gas stations? How much had the customer spent in January 2012?",January 2012 refers to the Date value = '201201',"SELECT SUM(T1.Price ) , SUM(IIF(T3.Date = '201201', T1.Price, 0)) FROM transactions_1k AS T1 INNER JOIN gasstations AS T2 ON T1.GasStationID = T2.GasStationID INNER JOIN yearmonth AS T3 ON T1.CustomerID = T3.CustomerID WHERE T1.CustomerID = '38508'","SELECT (SELECT SUM(Amount * Price) FROM transactions_1k WHERE CustomerID = 38508) AS total_spent, (SELECT Consumption FROM yearmonth WHERE CustomerID = 38508 AND Date = '201201') AS january_2012;",False,moderate,0,,,1675,17.1
+28,1531,debit_card_specializing,Who is the top spending customer and how much is the average price per single item purchased by this customer? What currency was being used?,average price per single item = Total(price) / Total(amount),"SELECT T2.CustomerID, SUM(T2.Price / T2.Amount), T1.Currency FROM customers AS T1 INNER JOIN transactions_1k AS T2 ON T1.CustomerID = T2.CustomerID WHERE T2.CustomerID = ( SELECT CustomerID FROM yearmonth ORDER BY Consumption DESC LIMIT 1 ) GROUP BY T2.CustomerID, T1.Currency","WITH cust AS (
+  SELECT customers.CustomerID AS CustomerID,
+         customers.Currency AS Currency,
+         SUM(transactions_1k.Amount * transactions_1k.Price) AS total_spend,
+         SUM(transactions_1k.Amount) AS total_amount
+  FROM transactions_1k
+  JOIN customers ON transactions_1k.CustomerID = customers.CustomerID
+  WHERE transactions_1k.Amount IS NOT NULL
+    AND transactions_1k.Price IS NOT NULL
+    AND customers.Currency IS NOT NULL
+  GROUP BY customers.CustomerID, customers.Currency
+  HAVING SUM(transactions_1k.Amount) > 0
+)
+SELECT CustomerID,
+       total_spend / total_amount AS average_price_per_item,
+       Currency
+FROM cust
+WHERE total_spend = (SELECT MAX(total_spend) FROM cust);",False,moderate,0,,,1675,22.6
+29,1533,debit_card_specializing,For all the people who paid more than 29.00 per unit of product id No.5. Give their consumption status in the August of 2012.,August of 2012 refers to the Date value = '201208' ; Price per unit of product = Price / Amount;,SELECT T2.Consumption FROM transactions_1k AS T1 INNER JOIN yearmonth AS T2 ON T1.CustomerID = T2.CustomerID WHERE T1.Price / T1.Amount > 29.00 AND T1.ProductID = 5 AND T2.Date = '201208',"SELECT Consumption
+FROM yearmonth y
+WHERE y.Date = '201208'
+  AND EXISTS (
+    SELECT 1
+    FROM transactions_1k t
+    WHERE t.CustomerID = y.CustomerID
+      AND t.ProductID = 5
+      AND t.Amount > 0
+      AND (t.Price / t.Amount) > 29.00
+  );",False,moderate,0,,,1675,26.1
+30,1312,student_club,What's Angela Sanders's major?,"Angela Sanders is the full name; full name refers to first_name, last_name; major refers to major_name.",SELECT T2.major_name FROM member AS T1 INNER JOIN major AS T2 ON T1.link_to_major = T2.major_id WHERE T1.first_name = 'Angela' AND T1.last_name = 'Sanders',"SELECT major.major_name
+FROM member
+JOIN major ON member.link_to_major = major.major_id
+WHERE member.first_name = 'Angela' AND member.last_name = 'Sanders';",True,simple,0,,,5751,9.5
+31,1317,student_club,"Among the students from the Student_Club who attended the event ""Women's Soccer"", how many of them want a T-shirt that's in medium size?",Women's Soccer is an event name; T-shirt that is in medium size refers to t_shirt_size = 'Medium',SELECT COUNT(T1.event_id) FROM event AS T1 INNER JOIN attendance AS T2 ON T1.event_id = T2.link_to_event INNER JOIN member AS T3 ON T2.link_to_member = T3.member_id WHERE T1.event_name = 'Women''s Soccer' AND T3.t_shirt_size = 'Medium',"SELECT COUNT(DISTINCT member.member_id)
+FROM attendance
+JOIN member ON attendance.link_to_member = member.member_id
+JOIN event ON attendance.link_to_event = event.event_id
+WHERE event.event_name = 'Women''s Soccer'
+  AND member.t_shirt_size = 'Medium'
+  AND member.position IS NOT NULL
+  AND member.position <> 'Inactive';",True,moderate,0,,,5624,24.1
+32,1322,student_club,"Among the events attended by more than 10 members of the Student_Club, how many of them are meetings?",meetings events refers to type = 'Meeting'; attended by more than 10 members refers to COUNT(event_id) > 10,SELECT COUNT(DISTINCT T1.event_id) FROM event AS T1 INNER JOIN attendance AS T2 ON T1.event_id = T2.link_to_event WHERE T1.type = 'Meeting' GROUP BY T1.event_id HAVING COUNT(T2.link_to_event) > 10,"SELECT COUNT(*) FROM (
+  SELECT event.event_id
+  FROM attendance
+  JOIN event ON attendance.link_to_event = event.event_id
+  WHERE event.type = 'Meeting'
+  GROUP BY event.event_id
+  HAVING COUNT(DISTINCT attendance.link_to_member) > 10
+);",False,moderate,0,,,6070,15.7
+33,1323,student_club,List all the names of events that had an attendance of over 20 students but were not fundraisers.,name of events refers to event_name; attendance of over 20 students COUNT(event_id) > 20.,SELECT T1.event_name FROM event AS T1 INNER JOIN attendance AS T2 ON T1.event_id = T2.link_to_event GROUP BY T1.event_id HAVING COUNT(T2.link_to_event) > 20 EXCEPT SELECT T1.event_name FROM event AS T1  WHERE T1.type = 'Fundraiser',"SELECT event.event_name
+FROM event
+JOIN attendance ON event.event_id = attendance.link_to_event
+WHERE (event.type IS NULL OR event.type != 'Fundraiser')
+  AND LOWER(event.event_name) NOT LIKE '%fundrais%'
+  AND LOWER(COALESCE(event.notes, '')) NOT LIKE '%fundrais%'
+GROUP BY event.event_id, event.event_name
+HAVING COUNT(attendance.link_to_member) > 20
+ORDER BY COUNT(attendance.link_to_member) DESC;",True,moderate,0,,,6070,18.0
+34,1331,student_club,What is the amount of the funds that the Vice President received?,'Vice President' is a position of Student Club; funds received refers to amount.,SELECT T2.amount FROM member AS T1 INNER JOIN income AS T2 ON T1.member_id = T2.link_to_member WHERE T1.position = 'Vice President',SELECT SUM(income.amount) FROM income JOIN member ON income.link_to_member = member.member_id WHERE member.position = 'Vice President' AND income.amount IS NOT NULL;,True,simple,0,,,5624,13.5
+35,1334,student_club,List the full name of the Student_Club members that grew up in Illinois state.,"full name of member refers to first_name, last_name","SELECT T1.first_name, T1.last_name FROM member AS T1 INNER JOIN zip_code AS T2 ON T1.zip = T2.zip_code WHERE T2.state = 'Illinois'","SELECT first_name || ' ' || last_name AS full_name
+FROM member
+WHERE zip BETWEEN 60001 AND 62999;",False,simple,0,,,5517,16.9
+36,1338,student_club,"Was each expense in October Meeting on October 8, 2019 approved?",event_name = 'October Meeting' where event_date = '2019-10-08'; approved = True means expenses was approved; approved = False means expenses was not approved,SELECT T3.approved FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event INNER JOIN expense AS T3 ON T2.budget_id = T3.link_to_budget WHERE T1.event_name = 'October Meeting' AND T1.event_date LIKE '2019-10-08%',"SELECT expense.expense_description, expense.approved
+FROM expense
+JOIN budget ON expense.link_to_budget = budget.budget_id
+JOIN event ON budget.link_to_event = event.event_id
+WHERE event.event_name = 'October Meeting'
+  AND event.event_date LIKE '2019-10-08%'
+  AND expense.expense_date = '2019-10-08'
+ORDER BY expense.expense_description ASC;",False,moderate,0,,,6070,25.4
+37,1339,student_club,Calculate the total average cost that Elijah Allen spent in the events on September and October.,"Elijah Allen is the full name; full name refers to first_name, last_name; The 5th and 6th string of the expense_date in the expense table can refer to month; events in September and October refers to month(expense_date) = 9 OR month(expense_date) = 10","SELECT AVG(T2.cost) FROM member AS T1 INNER JOIN expense AS T2 ON T1.member_id = T2.link_to_member WHERE T1.last_name = 'Allen' AND T1.first_name = 'Elijah' AND (SUBSTR(T2.expense_date, 6, 2) = '09' OR SUBSTR(T2.expense_date, 6, 2) = '10')","SELECT AVG(expense.cost) FROM expense JOIN member ON expense.link_to_member = member.member_id WHERE member.first_name = 'Elijah' AND member.last_name = 'Allen' AND CAST(SUBSTR(expense.expense_date,6,2) AS INTEGER) IN (9,10);",True,challenging,0,,,6070,20.0
+38,1340,student_club,Calculate the difference of the total amount spent in all events by the Student_Club in year 2019 and 2020.,"The first 4 strings of the event_date values in the event table can represent year; The difference of the total amount spent = SUBTRACT(spent where YEAR(event_date) = 2019, spent where YEAR(event_date) = 2020)","SELECT SUM(CASE WHEN SUBSTR(T1.event_date, 1, 4) = '2019' THEN T2.spent ELSE 0 END) - SUM(CASE WHEN SUBSTR(T1.event_date, 1, 4) = '2020' THEN T2.spent ELSE 0 END) AS num FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event","SELECT COALESCE(SUM(CASE WHEN SUBSTR(event.event_date,1,4) = '2019' THEN budget.spent END), 0) - COALESCE(SUM(CASE WHEN SUBSTR(event.event_date,1,4) = '2020' THEN budget.spent END), 0) AS difference
+FROM budget
+JOIN event ON budget.link_to_event = event.event_id;",True,moderate,0,,,6070,19.7
+39,1344,student_club,What was the notes of the fundraising on 2019/9/14?,fundraising on 2019/9/14 refers to source = 'Fundraising' where date_received = '2019-09-14',SELECT notes FROM income WHERE source = 'Fundraising' AND date_received = '2019-09-14',SELECT notes FROM income WHERE source = 'Fundraising' AND date_received = '2019-09-14';,True,simple,0,,,6070,7.9
+40,1346,student_club,"Tell the phone number of ""Carlo Jacobs"".","Carlo Jacobs is the full name; full name refers to first_name, last_name;",SELECT phone FROM member WHERE first_name = 'Carlo' AND last_name = 'Jacobs',SELECT phone FROM member WHERE first_name = 'Carlo' AND last_name = 'Jacobs';,True,simple,0,,,5657,6.6
+41,1350,student_club,"What is the status of the event which bought ""Post Cards, Posters"" on 2019/8/20?","'Post Cards, Posters' is an expense description; on 2019/8/20 refers to expense_date = '2019-8-20'; status of event refers to event_status","SELECT T1.event_status FROM budget AS T1 INNER JOIN expense AS T2 ON T1.budget_id = T2.link_to_budget WHERE T2.expense_description = 'Post Cards, Posters' AND T2.expense_date = '2019-08-20'","SELECT COALESCE(budget.event_status, event.status) AS status
+FROM expense
+JOIN budget ON expense.link_to_budget = budget.budget_id
+JOIN event ON budget.link_to_event = event.event_id
+WHERE expense.expense_description = 'Post Cards, Posters'
+  AND (expense.expense_date = '2019-8-20' OR expense.expense_date = '2019-08-20');",True,moderate,0,,,5976,18.1
+42,1351,student_club,What was Brent Thomason's major?,"Brent Thomason is the full name; full name refers to first_name, last_name; major refers to major_name",SELECT T2.major_name FROM member AS T1 INNER JOIN major AS T2 ON T1.link_to_major = T2.major_id WHERE T1.first_name = 'Brent' AND T1.last_name = 'Thomason',"SELECT major.major_name
+FROM member
+JOIN major ON member.link_to_major = major.major_id
+WHERE member.first_name = 'Brent' AND member.last_name = 'Thomason'",True,simple,0,,,5751,10.4
+43,1352,student_club,"For all the club members from ""Business"" major, how many of them wear medium size t-shirt?",'Business' is a major name; wear medium size t-shirt refers to t_shirt_size = 'Medium',SELECT COUNT(T1.member_id) FROM member AS T1 INNER JOIN major AS T2 ON T1.link_to_major = T2.major_id WHERE T2.major_name = 'Business' AND T1.t_shirt_size = 'Medium',SELECT COUNT(*) FROM member JOIN major ON member.link_to_major = major.major_id WHERE major.major_name = 'Business' AND member.t_shirt_size = 'Medium';,True,moderate,0,,,5624,10.4
+44,1356,student_club,Which department was the President of the club in?,'President' is a position of Student Club,SELECT T2.department FROM member AS T1 INNER JOIN major AS T2 ON T1.link_to_major = T2.major_id WHERE T1.position = 'President',SELECT major.department FROM member LEFT JOIN major ON member.link_to_major = major.major_id WHERE member.position = 'President';,True,simple,0,,,5871,9.0
+45,1357,student_club,State the date Connor Hilton paid his/her dues.,"Connor Hilton is the full name; full name refers to first_name, last_name; date the dues was paid refers to date_received where source = 'Dues';",SELECT T2.date_received FROM member AS T1 INNER JOIN income AS T2 ON T1.member_id = T2.link_to_member WHERE T1.first_name = 'Connor' AND T1.last_name = 'Hilton' AND T2.source = 'Dues',"SELECT income.date_received
+FROM member
+JOIN income ON member.member_id = income.link_to_member
+WHERE member.first_name = 'Connor'
+  AND member.last_name = 'Hilton'
+  AND income.source = 'Dues'
+  AND income.date_received IS NOT NULL;",True,simple,0,,,6070,11.9
+46,1359,student_club,"How many times was the budget in Advertisement for ""Yearly Kickoff"" meeting more than ""October Meeting""?","budget in Advertisement refer to category = 'Advertisement' in the budget table; DIVIDE(SUM(amount when event_name = 'Yearly Kickoff'), SUM(amount when event_name = 'October Meeting'))",SELECT CAST(SUM(CASE WHEN T2.event_name = 'Yearly Kickoff' THEN T1.amount ELSE 0 END) AS REAL) / SUM(CASE WHEN T2.event_name = 'October Meeting' THEN T1.amount ELSE 0 END) FROM budget AS T1 INNER JOIN event AS T2 ON T1.link_to_event = T2.event_id WHERE T1.category = 'Advertisement' AND T2.type = 'Meeting',"SELECT (SUM(CASE WHEN event.event_name = 'Yearly Kickoff' THEN budget.amount ELSE 0 END) * 1.0) / NULLIF(SUM(CASE WHEN event.event_name = 'October Meeting' THEN budget.amount ELSE 0 END), 0) AS times_more
+FROM budget
+JOIN event ON budget.link_to_event = event.event_id
+WHERE budget.category = 'Advertisement'
+  AND event.event_name IN ('Yearly Kickoff', 'October Meeting');",True,challenging,0,,,6070,18.5
+47,1361,student_club,What is the total cost of the pizzas for all the events?,total cost of the pizzas refers to SUM(cost) where expense_description = 'Pizza',SELECT SUM(cost) FROM expense WHERE expense_description = 'Pizza',SELECT SUM(cost) FROM expense WHERE expense_description = 'Pizza';,True,simple,0,,,6070,10.0
+48,1362,student_club,"How many cities are there in Orange County, Virginia?","Orange County is the county name, Virginia is the state name",SELECT COUNT(city) FROM zip_code WHERE county = 'Orange County' AND state = 'Virginia',SELECT COUNT(DISTINCT city) FROM zip_code WHERE county = 'Orange County' AND state = 'Virginia' AND city IS NOT NULL;,True,simple,0,,,5657,13.8
+49,1368,student_club,"What does the person with the phone number ""809-555-3360"" major in?",major in refers to major_name,SELECT T2.major_name FROM member AS T1 INNER JOIN major AS T2 ON T1.link_to_major = T2.major_id WHERE T1.phone = '809-555-3360',"SELECT major.major_name
+FROM member
+JOIN major ON member.link_to_major = major.major_id
+WHERE member.phone = '809-555-3360';",True,simple,0,,,5303,8.6
+50,1371,student_club,"How many members attended the ""Women's Soccer"" event?",'Women's Soccer' is the event name;,SELECT COUNT(T2.link_to_member) FROM event AS T1 INNER JOIN attendance AS T2 ON T1.event_id = T2.link_to_event WHERE T1.event_name = 'Women''s Soccer',SELECT COUNT(DISTINCT attendance.link_to_member) FROM attendance JOIN event ON attendance.link_to_event = event.event_id WHERE event.event_name = 'Women''s Soccer';,True,simple,0,,,6070,11.7
+51,1375,student_club,"List all the members of the ""School of Applied Sciences, Technology and Education"" department.","list all members means to list all the full name; full name refers to first_name, last_name;","SELECT T1.first_name, T1.last_name FROM member AS T1 INNER JOIN major AS T2 ON T1.link_to_major = T2.major_id WHERE T2.department = 'School of Applied Sciences, Technology and Education'","SELECT member.first_name, member.last_name
+FROM member
+JOIN major ON member.link_to_major = major.major_id
+WHERE major.department = 'School of Applied Sciences, Technology and Education'
+ORDER BY member.last_name ASC, member.first_name ASC;",True,moderate,0,,,5517,14.1
+52,1376,student_club,"Among all the closed events, which event has the highest spend-to-budget ratio?","closed events refers to event_name where status = 'Closed'; highest spend-to budget ratio refers to MAX(DIVIDE(spent, amount))",SELECT T2.event_name FROM budget AS T1 INNER JOIN event AS T2 ON T1.link_to_event = T2.event_id WHERE T2.status = 'Closed' ORDER BY T1.spent / T1.amount DESC LIMIT 1,"SELECT event.event_name
+FROM event
+JOIN budget ON budget.link_to_event = event.event_id
+WHERE event.status = 'Closed'
+GROUP BY event.event_id, event.event_name
+HAVING SUM(budget.amount) > 0
+ORDER BY SUM(budget.spent) * 1.0 / SUM(budget.amount) DESC
+LIMIT 1;",False,moderate,0,,,5509,20.2
+53,1378,student_club,What is the highest amount of budget spend for an event?,highest amount of budget spend refers to MAX(spent),SELECT MAX(spent) FROM budget,SELECT MAX(spent) FROM budget WHERE spent IS NOT NULL;,True,simple,0,,,6070,12.0
+54,1380,student_club,What is the total amount of money spent for food?,total amount of money spent refers to SUM(spent); spent for food refers to category = 'Food',SELECT SUM(spent) FROM budget WHERE category = 'Food',SELECT SUM(spent) FROM budget WHERE category = 'Food';,True,simple,0,,,6070,9.3
+55,1381,student_club,List the name of students that have attended more than 7 events.,"name of students means the full name; full name refers to first_name, last_name; attended more than 7 events refers to COUNT(link_to_event) > 7","SELECT T1.first_name, T1.last_name FROM member AS T1 INNER JOIN attendance AS T2 ON T1.member_id = T2.link_to_member GROUP BY T2.link_to_member HAVING COUNT(T2.link_to_event) > 7","SELECT member.first_name || ' ' || member.last_name
+FROM attendance
+JOIN member ON attendance.link_to_member = member.member_id
+GROUP BY member.member_id, member.first_name, member.last_name
+HAVING COUNT(attendance.link_to_event) > 7;",False,moderate,0,,,5517,17.4
+56,1387,student_club,Which student has been entrusted to manage the budget for the Yearly Kickoff?,"name of students means the full name; full name refers to first_name, last_name;'Yearly Kickoff' is an event name;","SELECT T4.first_name, T4.last_name FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event INNER JOIN expense AS T3 ON T2.budget_id = T3.link_to_budget INNER JOIN member AS T4 ON T3.link_to_member = T4.member_id WHERE T1.event_name = 'Yearly Kickoff'","SELECT member.first_name || ' ' || member.last_name
+FROM budget
+JOIN event ON budget.link_to_event = event.event_id
+JOIN expense ON expense.link_to_budget = budget.budget_id
+JOIN member ON expense.link_to_member = member.member_id
+WHERE event.event_name = 'Yearly Kickoff'
+GROUP BY member.member_id, member.first_name, member.last_name
+ORDER BY SUM(expense.cost) DESC
+LIMIT 1;",False,moderate,1,SCHEMA_ERROR,,7611,41.5
+57,1389,student_club,Which event has the lowest cost?,event refers to event_name; lowest cost means MIN(cost),SELECT T1.event_name FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event INNER JOIN expense AS T3 ON T2.budget_id = T3.link_to_budget ORDER BY T3.cost LIMIT 1,"SELECT event.event_name
+FROM expense
+JOIN budget ON expense.link_to_budget = budget.budget_id
+JOIN event ON budget.link_to_event = event.event_id
+WHERE expense.cost IS NOT NULL
+GROUP BY event.event_id, event.event_name
+ORDER BY SUM(expense.cost) ASC
+LIMIT 1;",False,simple,0,,,6070,28.1
+58,1390,student_club,"Based on the total cost for all event, what is the percentage of cost for Yearly Kickoff event?","percentage = DIVIDE(SUM(cost where event_name = 'Yearly Kickoff'), SUM(cost)) * 100",SELECT CAST(SUM(CASE WHEN T1.event_name = 'Yearly Kickoff' THEN T3.cost ELSE 0 END) AS REAL) * 100 / SUM(T3.cost) FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event INNER JOIN expense AS T3 ON T2.budget_id = T3.link_to_budget,SELECT CASE WHEN SUM(CASE WHEN budget.link_to_event IS NOT NULL THEN expense.cost ELSE 0 END)=0 THEN 0.0 ELSE SUM(CASE WHEN event.event_name = 'Yearly Kickoff' THEN expense.cost ELSE 0 END)*100.0 / SUM(CASE WHEN budget.link_to_event IS NOT NULL THEN expense.cost ELSE 0 END) END AS percentage FROM expense JOIN budget ON expense.link_to_budget = budget.budget_id LEFT JOIN event ON budget.link_to_event = event.event_id;,True,moderate,0,,,6070,26.8
+59,1392,student_club,Indicate the top source of funds received in September 2019 based on their amount.,top source funds refers to MAX(source); September 2019 means date_received BETWEEN '2019-09-01' and '2019-09-30',SELECT source FROM income WHERE date_received BETWEEN '2019-09-01' and '2019-09-30' ORDER BY source DESC LIMIT 1,"WITH totals AS (
+  SELECT source, SUM(amount) AS total
+  FROM income
+  WHERE date_received BETWEEN '2019-09-01' AND '2019-09-30'
+  GROUP BY source
+)
+SELECT source
+FROM totals
+WHERE total = (SELECT MAX(total) FROM totals);",True,simple,0,,,6384,15.8
+60,1394,student_club,How many members of the Student_Club have major in 'Physics Teaching'?,'Physics Teaching' is the major_name;,SELECT COUNT(T2.member_id) FROM major AS T1 INNER JOIN member AS T2 ON T1.major_id = T2.link_to_major WHERE T1.major_name = 'Physics Teaching',SELECT COUNT(*) FROM member JOIN major ON member.link_to_major = major.major_id WHERE major.major_name = 'Physics Teaching';,True,simple,0,,,5624,10.7
+61,1398,student_club,Name the event with the highest amount spent on advertisement.,Name of event refers to event_name; highest amount spent on advertisement refers to MAX(spent) where category = 'Advertisement',SELECT T2.event_name FROM budget AS T1 INNER JOIN event AS T2 ON T1.link_to_event = T2.event_id WHERE T1.category = 'Advertisement' ORDER BY T1.spent DESC LIMIT 1,"SELECT event.event_name
+FROM budget
+JOIN event ON budget.link_to_event = event.event_id
+WHERE budget.category = 'Advertisement'
+GROUP BY event.event_name
+ORDER BY MAX(budget.spent) DESC
+LIMIT 1;",True,moderate,0,,,6070,14.6
+62,1399,student_club,Did Maya Mclean attend the 'Women's Soccer' event?,"Maya Mclean is the full name; full name refers to first_name, last_name; 'Women's Soccer' is an event_name",SELECT CASE WHEN T3.event_name = 'Women''s Soccer' THEN 'YES' END AS result FROM member AS T1 INNER JOIN attendance AS T2 ON T1.member_id = T2.link_to_member INNER JOIN event AS T3 ON T2.link_to_event = T3.event_id WHERE T1.first_name = 'Maya' AND T1.last_name = 'Mclean',SELECT CASE WHEN COUNT(*)>0 THEN 'Yes' ELSE 'No' END FROM attendance JOIN member ON attendance.link_to_member = member.member_id JOIN event ON attendance.link_to_event = event.event_id WHERE member.first_name = 'Maya' AND member.last_name = 'Mclean' AND event.event_name = 'Women''s Soccer';,False,moderate,0,,,6070,18.0
+63,1401,student_club,Indicate the cost of posters for 'September Speaker' event.,'Posters' is the expense description; 'September Speaker' is an event name,SELECT T3.cost FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event INNER JOIN expense AS T3 ON T2.budget_id = T3.link_to_budget WHERE T1.event_name = 'September Speaker' AND T3.expense_description = 'Posters',"SELECT SUM(expense.cost) AS cost
+FROM expense
+JOIN budget ON expense.link_to_budget = budget.budget_id
+JOIN event ON budget.link_to_event = event.event_id
+WHERE event.event_name = 'September Speaker'
+  AND expense.expense_description LIKE '%Posters%' COLLATE NOCASE;",True,moderate,0,,,6070,17.3
+64,1403,student_club,Indicate the name of the closed event whose cost has exceeded the budget the most.,closed events refers to event_name where status = 'Closed'; exceed the budget the most refers to MIN(remaining) where remaining < 0,SELECT T2.event_name FROM budget AS T1 INNER JOIN event AS T2 ON T2.event_id = T1.link_to_event WHERE T1.event_status = 'Closed' AND T1.remaining < 0 ORDER BY T1.remaining LIMIT 1,"SELECT event.event_name
+FROM event
+JOIN budget ON event.event_id = budget.link_to_event
+WHERE event.status = 'Closed' AND budget.remaining < 0
+GROUP BY event.event_id, event.event_name
+ORDER BY MIN(budget.remaining) ASC
+LIMIT 1;",True,moderate,0,,,5509,19.7
+65,1404,student_club,Identify the type of expenses and their total value approved for 'October Meeting' event.,total value refers to SUM(cost); 'October Meeting' is an event name;,"SELECT T1.type, SUM(T3.cost) FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event INNER JOIN expense AS T3 ON T2.budget_id = T3.link_to_budget WHERE T1.event_name = 'October Meeting'","SELECT budget.category, SUM(expense.cost) AS total_value
+FROM expense
+JOIN budget ON expense.link_to_budget = budget.budget_id
+JOIN event ON budget.link_to_event = event.event_id
+WHERE event.event_name = 'October Meeting'
+  AND expense.approved = 'true'
+  AND expense.cost IS NOT NULL
+GROUP BY budget.category
+ORDER BY SUM(expense.cost) DESC;",False,moderate,0,,,6070,17.7
+66,1405,student_club,Calculate the amount budgeted for 'April Speaker' event. List all the budgeted categories for said event in an ascending order based on their amount budgeted.,'April Speaker' is an event name; amount budgeted refers to SUM(amount); budget categories refers to category,"SELECT T2.category, SUM(T2.amount) FROM event AS T1 JOIN budget AS T2 ON T1.event_id = T2.link_to_event WHERE T1.event_name = 'April Speaker' GROUP BY T2.category ORDER BY SUM(T2.amount) ASC","SELECT budget.category, SUM(budget.amount) AS amount
+FROM budget
+JOIN event ON budget.link_to_event = event.event_id
+WHERE event.event_name = 'April Speaker'
+GROUP BY budget.category
+ORDER BY amount ASC;",True,moderate,0,,,6070,16.8
+67,1409,student_club,Mention the total expense used on 8/20/2019.,total expense refers SUM(cost) where expense_date = '2019-08-20',SELECT SUM(cost) FROM expense WHERE expense_date = '2019-08-20',SELECT SUM(cost) FROM expense WHERE expense_date = '2019-08-20';,True,simple,0,,,6070,8.2
+68,1410,student_club,"List out the full name and total cost that member id ""rec4BLdZHS2Blfp4v"" incurred?","full name refers to first_name, last name","SELECT T1.first_name, T1.last_name, SUM(T2.cost) FROM member AS T1 INNER JOIN expense AS T2 ON T1.member_id = T2.link_to_member WHERE T1.member_id = 'rec4BLdZHS2Blfp4v'","SELECT member.first_name || ' ' || member.last_name AS full_name,
+       COALESCE(SUM(expense.cost), 0) AS total_cost
+FROM member
+LEFT JOIN expense ON member.member_id = expense.link_to_member
+WHERE member.member_id = 'rec4BLdZHS2Blfp4v'
+GROUP BY member.first_name, member.last_name;",False,simple,0,,,6070,17.3
+69,1411,student_club,State what kind of expenses that Sacha Harrison incurred?,"kind of expenses refers to expense_description; Sacha Harrison is the full name; full name refers to first_name, last_name;",SELECT T2.expense_description FROM member AS T1 INNER JOIN expense AS T2 ON T1.member_id = T2.link_to_member WHERE T1.first_name = 'Sacha' AND T1.last_name = 'Harrison',"SELECT DISTINCT expense.expense_description
+FROM expense
+JOIN member ON expense.link_to_member = member.member_id
+WHERE member.first_name = 'Sacha' AND member.last_name = 'Harrison';",False,simple,0,,,6070,11.3
+70,1422,student_club,State the category of events were held at MU 215.,'MU 215' is the location of event; ,SELECT DISTINCT T2.category FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event WHERE T1.location = 'MU 215',SELECT type FROM event WHERE location = 'MU 215' GROUP BY type;,False,simple,0,,,5976,8.7
+71,1426,student_club,List the last name of members with a major in environmental engineering and include its department and college name.,'Environmental Engineering' is the major_name;,"SELECT T2.last_name, T1.department, T1.college FROM major AS T1 INNER JOIN member AS T2 ON T1.major_id = T2.link_to_major WHERE T2.position = 'Member' AND T1.major_name = 'Environmental Engineering'","SELECT member.last_name, major.department, major.college
+FROM member
+JOIN major ON member.link_to_major = major.major_id
+WHERE major.major_name = 'Environmental Engineering' COLLATE NOCASE
+ORDER BY member.last_name ASC;",True,moderate,0,,,5624,10.5
+72,1427,student_club,What are the budget category of the events located at MU 215 and a guest speaker type with a 0 budget spent?,budget category refers to category; events located at refers to location; type = 'Guest Speaker'; 0 budget spent refers to spent = 0; ,"SELECT DISTINCT T2.category, T1.type FROM event AS T1 INNER JOIN budget AS T2 ON T1.event_id = T2.link_to_event WHERE T1.location = 'MU 215' AND T2.spent = 0 AND T1.type = 'Guest Speaker'","SELECT DISTINCT budget.category
+FROM budget
+JOIN event ON budget.link_to_event = event.event_id
+WHERE event.location = 'MU 215'
+  AND event.type = 'Guest Speaker'
+  AND budget.spent = 0;",False,moderate,0,,,6070,10.6
+73,1432,student_club,"Among the members with t-shirt size of medium, what is the percentage of the amount 50 received by the Student_Club?","t_shirt_size = 'Medium' where position = 'Member'; percentage = DIVIDE(COUNT(amount = 50), COUNT(member_id)) * 100",SELECT CAST(SUM(CASE WHEN T2.amount = 50 THEN 1.0 ELSE 0 END) AS REAL) * 100 / COUNT(T2.income_id) FROM member AS T1 INNER JOIN income AS T2 ON T1.member_id = T2.link_to_member WHERE T1.position = 'Member' AND T1.t_shirt_size = 'Medium',"SELECT CASE WHEN denom = 0 THEN 0 ELSE 100.0 * num / denom END AS percentage
+FROM (
+  SELECT
+    (SELECT COUNT(DISTINCT m.member_id)
+     FROM member m
+     JOIN income i ON m.member_id = i.link_to_member
+     WHERE m.t_shirt_size = 'Medium'
+       AND m.position = 'Member'
+       AND i.amount = 50
+       AND i.source = 'Student_Club') AS num,
+    (SELECT COUNT(*)
+     FROM member m2
+     WHERE m2.t_shirt_size = 'Medium'
+       AND m2.position = 'Member') AS denom
+);",False,moderate,0,,,5624,21.6
+74,1435,student_club,"List the names of closed event as ""game"" that was closed from 3/15/2019 to 3/20/2020.",name of events refers event_name; game event that was closed refers to type = 'Game' where status = 'Closed'; event_date BETWEEN '2019-03-15' and '2020-03-20'; ,"SELECT DISTINCT event_name FROM event WHERE type = 'Game' AND date(SUBSTR(event_date, 1, 10)) BETWEEN '2019-03-15' AND '2020-03-20' AND status = 'Closed'","SELECT event_name AS game
+FROM event
+WHERE type = 'Game'
+  AND status = 'Closed'
+  AND SUBSTR(event_date,1,10) >= '2019-03-15'
+  AND SUBSTR(event_date,1,10) <= '2020-03-20'
+ORDER BY event_date ASC;",False,moderate,0,,,5415,16.9
+75,1457,student_club,Give the full name and contact number of members who had to spend more than average on each expense.,"full name refers to first_name, last_name; contact number refers to phone; had spent more than average on each expense refers to cost > AVG(cost)","SELECT DISTINCT T3.first_name, T3.last_name, T3.phone FROM expense AS T1 INNER JOIN budget AS T2 ON T1.link_to_budget = T2.budget_id INNER JOIN member AS T3 ON T3.member_id = T1.link_to_member WHERE T1.cost > ( SELECT AVG(T1.cost) FROM expense AS T1 INNER JOIN budget AS T2 ON T1.link_to_budget = T2.budget_id INNER JOIN member AS T3 ON T3.member_id = T1.link_to_member )","SELECT member.first_name || ' ' || member.last_name, member.phone
+FROM expense
+JOIN member ON expense.link_to_member = member.member_id
+WHERE expense.cost > (SELECT AVG(cost) FROM expense)
+GROUP BY member.member_id, member.first_name, member.last_name, member.phone;",False,challenging,0,,,5624,19.9
+76,1460,student_club,"Write the full name of the member who spent money for water, veggie tray and supplies and include the cost of it.","full name refers to first_name, last name; spent money for refers expense description; expense_description = 'Water, Veggie tray, supplies'","SELECT T2.first_name, T2.last_name, T1.cost FROM expense AS T1 INNER JOIN member AS T2 ON T1.link_to_member = T2.member_id WHERE T1.expense_description = 'Water, Veggie tray, supplies'","SELECT member.first_name || ' ' || member.last_name, expense.cost
+FROM expense
+JOIN member ON expense.link_to_member = member.member_id
+WHERE expense.expense_description = 'Water, Veggie tray, supplies'
+   OR (
+     lower(expense.expense_description) LIKE '%water%'
+     AND lower(expense.expense_description) LIKE '%veggie%'
+     AND lower(expense.expense_description) LIKE '%supplies%'
+   );",False,challenging,0,,,6070,15.3
+77,1464,student_club,Write the full names of students who received funds on the date of 9/9/2019 and include the amount received.,"full name refers to first_name, last_name, amount of funds received refers to amount, received funds on date refers to date_received","SELECT DISTINCT T3.first_name, T3.last_name, T4.amount FROM event AS T1 INNER JOIN attendance AS T2 ON T1.event_id = T2.link_to_event INNER JOIN member AS T3 ON T3.member_id = T2.link_to_member INNER JOIN income AS T4 ON T4.link_to_member = T3.member_id WHERE T4.date_received = '2019-09-09'","SELECT member.first_name || ' ' || member.last_name AS full_name, income.amount
+FROM income
+JOIN member ON income.link_to_member = member.member_id
+WHERE income.date_received = '2019-09-09';",False,challenging,0,,,6070,14.7
+78,1149,thrombosis_prediction,Are there more in-patient or outpatient who were male? What is the deviation in percentage?,"male refers to SEX = 'M'; in-patient refers to Admission = '+'; outpatient refers to Admission = '-'; percentage = DIVIDE(COUNT(ID) where SEX = 'M' and Admission = '+', COUNT(ID) where SEX  = 'M' and Admission = '-')",SELECT CAST(SUM(CASE WHEN Admission = '+' THEN 1 ELSE 0 END) AS REAL) * 100 / SUM(CASE WHEN Admission = '-' THEN 1 ELSE 0 END) FROM Patient WHERE SEX = 'M',"SELECT
+  CASE WHEN SUM(CASE WHEN Admission = '+' AND SEX = 'M' THEN 1 ELSE 0 END) >= SUM(CASE WHEN Admission = '-' AND SEX = 'M' THEN 1 ELSE 0 END) THEN 'in-patient' ELSE 'outpatient' END AS More,
+  CASE WHEN SUM(CASE WHEN Admission IN ('+','-') AND SEX = 'M' THEN 1 ELSE 0 END) = 0 THEN 0.0
+       ELSE (ABS(SUM(CASE WHEN Admission = '+' AND SEX = 'M' THEN 1 ELSE 0 END) - SUM(CASE WHEN Admission = '-' AND SEX = 'M' THEN 1 ELSE 0 END)) * 100.0)
+            / SUM(CASE WHEN Admission IN ('+','-') AND SEX = 'M' THEN 1 ELSE 0 END)
+  END AS Deviation_Percentage
+FROM Patient;",False,moderate,0,,,6978,29.6
+79,1150,thrombosis_prediction,What is the percentage of female patient were born after 1930?,"female refers to Sex = 'F'; patient who were born after 1930 refers to year(Birthday) > '1930'; calculation = DIVIDE(COUNT(ID) where year(Birthday) > '1930' and SEX = 'F'), (COUNT(ID) where SEX = 'F')","SELECT CAST(SUM(CASE WHEN STRFTIME('%Y', Birthday) > '1930' THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(*) FROM Patient WHERE SEX = 'F'","SELECT 100.0 * SUM(CASE WHEN SEX='F' AND Birthday IS NOT NULL AND Birthday<>'' AND CAST(substr(Birthday,1,4) AS INTEGER) > 1930 THEN 1 ELSE 0 END) / SUM(CASE WHEN SEX='F' AND Birthday IS NOT NULL AND Birthday<>'' THEN 1 ELSE 0 END) FROM Patient;",True,moderate,0,,,6978,20.9
+80,1152,thrombosis_prediction,What is the ratio of outpatient to inpatient followed up treatment among all the 'SLE' diagnosed patient?,"'SLE' diagnosed patient means Diagnosis = 'SLE'; inpatient refers to Admission = '+'; outpatient refers to Admission = '-'; calculation =  DIVIDE(COUNT(ID) where Diagnosis = 'SLE' and Admission = '+', COUNT(ID) where Diagnosis = 'SLE' and Admission = '-')",SELECT SUM(CASE WHEN Admission = '+' THEN 1.0 ELSE 0 END) / SUM(CASE WHEN Admission = '-' THEN 1 ELSE 0 END) FROM Patient WHERE Diagnosis = 'SLE',"SELECT
+  CASE
+    WHEN SUM(CASE WHEN Admission = '+' THEN 1 ELSE 0 END) = 0 THEN NULL
+    ELSE 1.0 * SUM(CASE WHEN Admission = '-' THEN 1 ELSE 0 END) / SUM(CASE WHEN Admission = '+' THEN 1 ELSE 0 END)
+  END AS ratio
+FROM Patient
+WHERE Diagnosis = 'SLE'
+  AND Admission IS NOT NULL
+  AND Admission <> ''
+  AND Admission IN ('-', '+');",False,moderate,0,,,6978,20.6
+81,1153,thrombosis_prediction,What is the disease patient '30609' diagnosed with. List all the date of laboratory tests done for this patient.,'30609' is the Patient ID; disease means Diagnosis,"SELECT T1.Diagnosis, T2.Date FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T1.ID = 30609","SELECT Patient.Diagnosis, Laboratory.Date
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Patient.ID = 30609
+ORDER BY Laboratory.Date ASC;",True,simple,0,,,6978,16.6
+82,1155,thrombosis_prediction,"List the patient ID, sex and birthday of patient with LDH beyond normal range.",LDH beyond normal range refers to LDH > '500';,"SELECT DISTINCT T1.ID, T1.SEX, T1.Birthday FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.LDH > 500","SELECT DISTINCT Patient.ID, Patient.SEX, Patient.Birthday
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Laboratory.LDH > 500
+ORDER BY Patient.ID ASC;",True,simple,0,,,6978,12.1
+83,1156,thrombosis_prediction,State the ID and age of patient with positive degree of coagulation.,"age refers to SUBTRACT(year(current_timestamp), year(Birthday)); positive degree of coagulation refers to RVVT = '+';","SELECT DISTINCT T1.ID, STRFTIME('%Y', CURRENT_TIMESTAMP) - STRFTIME('%Y', T1.Birthday) FROM Patient AS T1 INNER JOIN Examination AS T2 ON T1.ID = T2.ID WHERE T2.RVVT = '+'","SELECT DISTINCT Patient.ID AS ID, (CAST(strftime('%Y','now') AS INTEGER) - CAST(strftime('%Y', Patient.Birthday) AS INTEGER)) AS age
+FROM Examination JOIN Patient ON Examination.ID = Patient.ID
+WHERE Examination.RVVT = '+' AND Patient.Birthday IS NOT NULL;",True,moderate,0,,,6978,18.8
+84,1157,thrombosis_prediction,"For patients with severe degree of thrombosis, list their ID, sex and disease the patient is diagnosed with.",severe degree of thrombosis refers to thrombosis = 2; disease refers to diagnosis;,"SELECT DISTINCT T1.ID, T1.SEX, T1.Diagnosis FROM Patient AS T1 INNER JOIN Examination AS T2 ON T1.ID = T2.ID WHERE T2.Thrombosis = 2","SELECT Patient.ID, Patient.SEX, Patient.Diagnosis
+FROM Examination
+JOIN Patient ON Examination.ID = Patient.ID
+WHERE Examination.Thrombosis = 2
+GROUP BY Patient.ID, Patient.SEX, Patient.Diagnosis
+ORDER BY Patient.ID ASC;",True,simple,0,,,6978,13.8
+85,1162,thrombosis_prediction,How many female patients who came at the hospital in 1997 was immediately followed at the outpatient clinic?,female refers to sex = 'F'; came at the hospital in 1997 refers to year(Description) = '1997'; immediately followed at the outpatient clinic refers to Admission = '-',"SELECT COUNT(*) FROM Patient WHERE STRFTIME('%Y', Description) = '1997' AND SEX = 'F' AND Admission = '-'","SELECT COUNT(DISTINCT ID) FROM Patient WHERE SEX = 'F' AND substr(Description,1,4) = '1997' AND Admission = '-';",True,moderate,0,,,6978,12.5
+86,1164,thrombosis_prediction,How many of the patients with the most serious thrombosis cases examined in 1997 are women?,the most serious thrombosis refers to Thrombosis = '1' (the most severe one); women refers to sex = 'F',"SELECT  COUNT(*) FROM Patient AS T1 INNER JOIN Examination AS T2 ON T1.ID = T2.ID WHERE T1.SEX = 'F' AND STRFTIME('%Y', T2.`Examination Date`) = '1997' AND T2.Thrombosis = 1","SELECT COUNT(DISTINCT Patient.ID)
+FROM Examination
+JOIN Patient ON Examination.ID = Patient.ID
+WHERE substr(""Examination Date"",1,4) = '1997'
+  AND Examination.Thrombosis = 1
+  AND Patient.SEX = 'F';",True,moderate,0,,,6978,17.9
+87,1166,thrombosis_prediction,What are the symptoms observed by the youngest patient to ever did a medical examination? Identify their diagnosis.,"The larger the birthday value, the younger the person is, and vice versa; symptoms observed refers to the symptoms is not NULL","SELECT T2.Symptoms, T1.Diagnosis FROM Patient AS T1 INNER JOIN Examination AS T2 ON T1.ID = T2.ID WHERE T2.Symptoms IS NOT NULL ORDER BY T1.Birthday DESC LIMIT 1","SELECT Examination.Symptoms, Patient.Diagnosis
+FROM Patient
+JOIN Examination ON Patient.ID = Examination.ID
+WHERE Examination.Symptoms IS NOT NULL
+  AND Patient.Birthday = (
+    SELECT MAX(p2.Birthday)
+    FROM Patient p2
+    JOIN Examination e2 ON p2.ID = e2.ID
+  )
+ORDER BY Patient.Birthday DESC;",False,simple,0,,,6978,20.4
+88,1168,thrombosis_prediction,"The oldest SJS patient's medical laboratory work was completed on what date, and what age was the patient when they initially arrived at the hospital?","The larger the birthday value, the younger the person is, and vice versa; 'SJS' refers to diagnosis; (SUBTRACT(year(`First Date`)), year(Birthday)); age of the patients when they initially arrived at the hospital refers to year(Birthday)","SELECT T1.Date, STRFTIME('%Y', T2.`First Date`) - STRFTIME('%Y', T2.Birthday),T2.Birthday FROM Laboratory AS T1 INNER JOIN Patient AS T2 ON T1.ID = T2.ID WHERE T2.Diagnosis = 'SJS' AND T2.Birthday IS NOT NULL ORDER BY T2.Birthday ASC LIMIT 1","SELECT MAX(Laboratory.Date) AS ""Date"",
+       (CAST(substr(Patient.""First Date"",1,4) AS INTEGER) - CAST(substr(Patient.Birthday,1,4) AS INTEGER)) AS Age
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Patient.Diagnosis = 'SJS'
+  AND Patient.Birthday IS NOT NULL
+  AND Laboratory.Date IS NOT NULL
+  AND Patient.Birthday = (SELECT MIN(Birthday) FROM Patient WHERE Diagnosis = 'SJS' AND Birthday IS NOT NULL)
+GROUP BY Patient.ID, Patient.Birthday, Patient.""First Date""
+ORDER BY Patient.Birthday ASC;",False,challenging,0,,,6978,27.2
+89,1169,thrombosis_prediction,What is the ratio of male to female patients among all those with abnormal uric acid counts?,"male refers to SEX = 'M'; female refers to SEX = 'F'; abnormal uric acid refers to UA < = '8.0' where SEX = 'M', UA < = '6.5' where SEX = 'F'; calculation = DIVIDE(SUM(UA <= '8.0' and SEX = 'M'), SUM(UA <= '6.5 and SEX = 'F'))",SELECT CAST(SUM(CASE WHEN T2.UA <= 8.0 AND T1.SEX = 'M' THEN 1 ELSE 0 END) AS REAL) / SUM(CASE WHEN T2.UA <= 6.5 AND T1.SEX = 'F' THEN 1 ELSE 0 END) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID,"SELECT CASE WHEN female_count = 0 THEN NULL ELSE male_count * 1.0 / female_count END AS ratio
+FROM (
+  SELECT
+    SUM(CASE WHEN SEX = 'M' THEN 1 ELSE 0 END) AS male_count,
+    SUM(CASE WHEN SEX = 'F' THEN 1 ELSE 0 END) AS female_count
+  FROM (
+    SELECT DISTINCT Patient.ID, Patient.SEX
+    FROM Patient
+    JOIN Laboratory ON Patient.ID = Laboratory.ID
+    WHERE Patient.SEX IN ('M','F')
+      AND (
+        (Patient.SEX = 'M' AND Laboratory.UA > 8.0)
+        OR (Patient.SEX = 'F' AND Laboratory.UA > 6.5)
+      )
+  )
+);",False,challenging,0,,,6978,34.7
+90,1171,thrombosis_prediction,How many underage patients were examined during the course of the three-year period from 1990 to 1993?,underage patients refers to year(Birthday) < 18; three-year period from 1990 to 1993 refers to year(`Examination Date`) between '1990' and '1993',"SELECT COUNT(T1.ID) FROM Patient AS T1 INNER JOIN Examination AS T2 ON T1.ID = T2.ID WHERE STRFTIME('%Y', T2.`Examination Date`) BETWEEN '1990' AND '1993' AND STRFTIME('%Y', T2.`Examination Date`) - STRFTIME('%Y', T1.Birthday) < 18","SELECT COUNT(DISTINCT Patient.ID) FROM ""Examination"" JOIN ""Patient"" ON ""Examination"".ID = ""Patient"".ID WHERE ""Examination"".""Examination Date"" IS NOT NULL AND ""Examination"".""Examination Date"" <> '' AND ""Patient"".""Birthday"" IS NOT NULL AND ""Patient"".""Birthday"" <> '' AND ""Examination"".""Examination Date"" BETWEEN '1990-01-01' AND '1993-12-31' AND date(""Examination"".""Examination Date"") < date(""Patient"".""Birthday"", '+18 years');",True,challenging,0,,,6978,20.9
+91,1175,thrombosis_prediction,"How old was the patient who had the highest hemoglobin count at the time of the examination, and what is the doctor's diagnosis?","How old the patient refers to SUBTRACT(year(`Examination Date`), year(Birthday)); the highest hemoglobin count refers to MAX(HGB)","SELECT STRFTIME('%Y', T2.Date) - STRFTIME('%Y', T1.Birthday), T1.Diagnosis FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID ORDER BY T2.HGB DESC LIMIT 1","SELECT
+  (CAST(strftime('%Y', ""Examination"".""Examination Date"") AS INTEGER) - CAST(strftime('%Y', Patient.Birthday) AS INTEGER)) AS Age,
+  ""Examination"".Diagnosis
+FROM Laboratory
+JOIN ""Examination"" ON Laboratory.ID = ""Examination"".ID
+JOIN Patient ON ""Examination"".ID = Patient.ID
+WHERE Laboratory.HGB = (SELECT MAX(HGB) FROM Laboratory)
+ORDER BY Laboratory.HGB DESC;",False,moderate,0,,,6978,23.0
+92,1179,thrombosis_prediction,"For the patient who was diagnosed with SLE on 1994/2/19, what was his/her anti-Cardiolipin antibody concentration status on 1993/11/12?",diagnosed with SLE refers to Diagnosis = 'SLE'; 1994/2/19 refers to Description = '1994-02-19'; anti-Cardiolipin refers to aCL IgM; 1993/11/12 refers to Examination Date = '1993/11/12',"SELECT `aCL IgA`, `aCL IgG`, `aCL IgM` FROM Examination WHERE ID IN ( SELECT ID FROM Patient WHERE Diagnosis = 'SLE' AND Description = '1994-02-19' ) AND `Examination Date` = '1993-11-12'","SELECT Examination.""aCL IgM"" FROM Patient JOIN Examination ON Patient.ID = Examination.ID WHERE Patient.Diagnosis = 'SLE' AND Patient.Description = '1994-02-19' AND Examination.""Examination Date"" = '1993-11-12';",False,moderate,0,,,6978,14.0
+93,1185,thrombosis_prediction,"For the patient who was born on 1959/2/18, what is the decrease rate for his/her total cholesterol from November to December in 1981?","born on 1959/2/18 refers to Birthday = '1959-02-18'; calculation = DIVISION(SUBTRACT(SUM(Birthday = '1959-02-18' and Date like '1981-11-%' THEN `T-CHO`), SUM(Birthday = '1959-02-18' and Date like '1981-12-%' THEN `T-CHO`)), SUM(Birthday = '1959-02-18' and Date like '1981-12-%' THEN `T-CHO`))",SELECT CAST((SUM(CASE WHEN T2.Date LIKE '1981-11-%' THEN T2.`T-CHO` ELSE 0 END) - SUM(CASE WHEN T2.Date LIKE '1981-12-%' THEN T2.`T-CHO` ELSE 0 END)) AS REAL) / SUM(CASE WHEN T2.Date LIKE '1981-12-%' THEN T2.`T-CHO` ELSE 0 END) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T1.Birthday = '1959-02-18',"SELECT ((SUM(CASE WHEN Laboratory.Date LIKE '1981-11-%' THEN Laboratory.""T-CHO"" END) - SUM(CASE WHEN Laboratory.Date LIKE '1981-12-%' THEN Laboratory.""T-CHO"" END)) * 1.0) / NULLIF(SUM(CASE WHEN Laboratory.Date LIKE '1981-12-%' THEN Laboratory.""T-CHO"" END),0)
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Patient.Birthday = '1959-02-18'
+  AND (Laboratory.Date LIKE '1981-11-%' OR Laboratory.Date LIKE '1981-12-%')
+  AND Laboratory.""T-CHO"" IS NOT NULL
+GROUP BY Patient.ID;",True,challenging,0,,,6978,24.2
+94,1187,thrombosis_prediction,How many patients who were examined between 1987/7/6 and 1996/1/31 had a GPT level greater than 30 and an ALB level less than 4? List them by their ID.,examined between 1987/7/6 and 1996/1/31 refers to Date BETWEEN '1987-07-06' AND '1996-01-31'; GPT level greater than 30 refers to GPT > 30; ALB level less than 4 ALB < 4,SELECT DISTINCT ID FROM Laboratory WHERE Date BETWEEN '1987-07-06' AND '1996-01-31' AND GPT > 30 AND ALB < 4,"SELECT DISTINCT ID
+FROM Laboratory
+WHERE Date BETWEEN '1987-07-06' AND '1996-01-31'
+  AND GPT > 30
+  AND ALB < 4
+ORDER BY ID ASC;",True,moderate,0,,,6978,19.6
+95,1189,thrombosis_prediction,"What number of patients with a degree of thrombosis level 2 and ANA pattern of only S, have a level of anti-Cardiolip in antibody (IgM) 20% higher than average?","thrombosis level 2 refers to Thrombosis = 2; ANA pattern of only S refers to ANA = 'S'; average anti-Cardiolip in antibody (IgM) refers to AVG(`aCL IgM`); calculation = MULTIPLY(AVG + AVG, 0.2)",SELECT COUNT(*) FROM Examination WHERE Thrombosis = 2 AND `ANA Pattern` = 'S' AND `aCL IgM` > (SELECT AVG(`aCL IgM`) * 1.2 FROM Examination WHERE Thrombosis = 2 AND `ANA Pattern` = 'S'),"SELECT COUNT(DISTINCT ID) FROM Examination WHERE Thrombosis = 2 AND ""ANA Pattern"" = 'S' AND ""aCL IgM"" >= 1.2 * (SELECT AVG(""aCL IgM"") FROM Examination);",False,challenging,0,,,6978,14.6
+96,1192,thrombosis_prediction,List all patients who were followed up at the outpatient clinic who underwent a laboratory test in October 1991 and had a total blood bilirubin level within the normal range.,followed up at the outpatient clinic refers to Admission = '-'; laboratory test in April 1981 refers to Date like '1991-10%'; blood bilirubin level within the normal range refers to T-BIL < 2.0; ,SELECT DISTINCT T1.ID FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T1.Admission = '-' AND T2.`T-BIL` < 2.0 AND T2.Date LIKE '1991-10-%',"SELECT DISTINCT Patient.ID
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Patient.Admission = '-'
+  AND Laboratory.Date LIKE '1991-10%'
+  AND Laboratory.""T-BIL"" < 2.0
+ORDER BY Patient.ID ASC;",True,challenging,0,,,6978,16.0
+97,1195,thrombosis_prediction,What is the average blood albumin level for female patients with a PLT greater than 400 who have been diagnosed with SLE?,average blood albumin level refers to AVG(ALB); female refers to SEX = 'F'; PLT greater than 400 refers to PLT > 400; diagnosed with SLE refers to Diagnosis= 'SLE',SELECT AVG(T2.ALB) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.PLT > 400 AND T1.Diagnosis = 'SLE' AND T1.SEX = 'F',SELECT AVG(Laboratory.ALB) FROM Patient JOIN Laboratory ON Patient.ID = Laboratory.ID WHERE Patient.SEX = 'F' AND Laboratory.PLT > 400 AND Patient.Diagnosis = 'SLE' AND Laboratory.ALB IS NOT NULL;,True,moderate,0,,,6978,17.2
+98,1198,thrombosis_prediction,How many female patients were given an APS diagnosis?,female refers to SEX = 'F'; APS diagnosis refers to Diagnosis='APS',SELECT COUNT(ID) FROM Patient WHERE SEX = 'F' AND Diagnosis = 'APS',SELECT COUNT(DISTINCT ID) FROM Patient WHERE SEX = 'F' AND Diagnosis = 'APS';,True,simple,0,,,6978,12.7
+99,1201,thrombosis_prediction,What percentage of patients who were born in 1980 and were diagnosed with RA are women?,"born in 1980 refers to YEAR(BIRTHDAY) = '1980'; 'RA' refers to Diagnosis='RA' ; women refers to SEX = 'F'; calculation = DIVIDE(SUM(SEX = 'F'), COUNT(SEX)) * 100","SELECT CAST(SUM(CASE WHEN SEX = 'F' THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(ID) FROM Patient WHERE Diagnosis = 'RA' AND STRFTIME('%Y', Birthday) = '1980'","SELECT (SUM(CASE WHEN SEX='F' THEN 1 ELSE 0 END) * 100.0) / COUNT(*) FROM Patient WHERE substr(Birthday,1,4) = '1980' AND Diagnosis = 'RA' AND SEX IS NOT NULL AND SEX <> '';",True,moderate,0,,,6978,18.9
+100,1205,thrombosis_prediction,Was the patient with the number 57266's uric acid within a normal range?,uric acid within a normal range refers to UA > 8.0 and SEX = 'M'OR UA > 6.5 and SEX = 'F',SELECT CASE WHEN (T1.SEX = 'F' AND T2.UA > 6.5) OR (T1.SEX = 'M' AND T2.UA > 8.0) THEN true ELSE false END FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T1.ID = 57266,"SELECT
+CASE
+  WHEN p.SEX = 'M' AND l.UA <= 8.0 THEN 'Yes'
+  WHEN p.SEX = 'F' AND l.UA <= 6.5 THEN 'Yes'
+  WHEN p.SEX IN ('M','F') AND l.UA IS NOT NULL THEN 'No'
+  ELSE 'Unknown'
+END AS within_normal_range
+FROM Laboratory l
+JOIN Patient p ON l.ID = p.ID
+WHERE p.ID = 57266
+  AND l.Date = (SELECT MAX(Date) FROM Laboratory WHERE ID = 57266)
+  AND l.UA IS NOT NULL;",False,moderate,0,,,6978,33.6
+101,1208,thrombosis_prediction,Provide IDs for male patients with ALT glutamic pylvic transaminase (GPT) that have history of ALT glutamic pylvic transaminase (GPT) exceed the normal range.,male refers to SEX = 'M'; ALT glutamic pylvic transaminase (GPT) exceed the normal range refers to GPT > = 60,SELECT DISTINCT T1.ID FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T1.SEX = 'M' AND T2.GPT >= 60,"SELECT Patient.ID
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Patient.SEX = 'M'
+  AND Laboratory.GPT >= 60
+GROUP BY Patient.ID
+ORDER BY Patient.ID ASC;",True,moderate,0,,,6978,11.6
+102,1209,thrombosis_prediction,Please provide the diagnosis of patients with ALT glutamic pylvic transaminase beyond the normal range by ascending order of their date of birth.,"ALT glutamic pylvic transaminase beyond the normal range refers to GPT > 60; The larger the birthday value, the younger the person is, and vice versa; ",SELECT DISTINCT T1.Diagnosis FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.GPT > 60 ORDER BY T1.Birthday ASC,"SELECT Diagnosis FROM (
+  SELECT DISTINCT Patient.ID, Patient.Birthday, COALESCE(Patient.Diagnosis, Examination.Diagnosis) AS Diagnosis
+  FROM Laboratory
+  JOIN Patient ON Laboratory.ID = Patient.ID
+  LEFT JOIN Examination ON Examination.ID = Patient.ID
+  WHERE Laboratory.GPT > 60 AND Patient.Birthday IS NOT NULL
+) ORDER BY Birthday ASC;",False,moderate,0,,,6978,24.8
+103,1220,thrombosis_prediction,"Provide all ID, sex and birthday of patients whose urea nitrogen (UN) just within the borderline of passing?",urea nitrogen (UN) just within the borderline of passing refers to UN = 29; ,"SELECT DISTINCT T1.ID, T1.SEX, T1.Birthday FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.UN = 29","SELECT DISTINCT Patient.ID, Patient.SEX, Patient.Birthday
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Laboratory.UN = 29
+ORDER BY Patient.ID ASC;",True,simple,0,,,6978,8.7
+104,1225,thrombosis_prediction,List and group all patients by sex for total bilirubin (T-BIL) level not within the normal range.,List refers to GROUP_CONCAT(DISTINCT ID); total bilirubin (T-BIL) not within normal range refers to T-BIL > = 2.0,"SELECT T1.ID,T1.SEX FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.`T-BIL` >= 2.0 GROUP BY T1.SEX,T1.ID","SELECT Patient.SEX, GROUP_CONCAT(DISTINCT Laboratory.ID) FROM Laboratory JOIN Patient ON Laboratory.ID = Patient.ID WHERE Laboratory.""T-BIL"" >= 2.0 GROUP BY Patient.SEX ORDER BY Patient.SEX ASC;",False,moderate,0,,,6978,21.9
+105,1227,thrombosis_prediction,What is the average age of the male patient with high cholesterol?,"average age = DIVIDE(SUM(SUBTRACT(YEAR(NOW()), YEAR(birthday))), COUNT(ID)); male patient refers to sex = 'M'; high cholesterol refers to `T-CHO` > = 250;","SELECT AVG(STRFTIME('%Y', date('NOW')) - STRFTIME('%Y', T1.Birthday)) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.`T-CHO` >= 250 AND T1.SEX = 'M'","SELECT AVG((strftime('%Y','now') - strftime('%Y', p.Birthday)) - (strftime('%m-%d','now') < strftime('%m-%d', p.Birthday))) FROM Patient p WHERE p.SEX = 'M' AND p.Birthday IS NOT NULL AND EXISTS (SELECT 1 FROM Laboratory l WHERE l.ID = p.ID AND l.""T-CHO"" >= 250)",False,moderate,0,,,6978,23.3
+106,1229,thrombosis_prediction,"For all patients with triglyceride (TG) level beyond the normal range, how many are age more than 50 years?","triglyceride (TG) level beyond the normal range refers to TG > = 200; more than 50 years of age = SUBTRACT(year(current_timestamp), year(Birthday)) > 50; Should consider DISTINCT in the final result;","SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.TG >= 200 AND STRFTIME('%Y', CURRENT_TIMESTAMP) - STRFTIME('%Y', T1.Birthday) > 50","SELECT COUNT(DISTINCT Patient.ID) FROM Laboratory JOIN Patient ON Laboratory.ID = Patient.ID WHERE Laboratory.TG >= 200 AND (CAST(strftime('%Y','now') AS INTEGER) - CAST(strftime('%Y', Patient.Birthday) AS INTEGER) > 50);",True,moderate,0,,,6978,16.7
+107,1231,thrombosis_prediction,"For patient born between 1936-1956, how many male patients have creatinine phosphokinase beyond the normal range?",born between 1936-1956 refers to year(Birthday) BETWEEN '1936' AND '1956'; male patients refers to sex = 'M'; creatinine phosphokinase beyond the normal range refers to CPK > = 250; Should consider DISTINCT in the final result;,"SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE STRFTIME('%Y', T1.Birthday) BETWEEN '1936' AND '1956' AND T1.SEX = 'M' AND T2.CPK >= 250","SELECT COUNT(DISTINCT Patient.ID) FROM Patient JOIN Laboratory ON Patient.ID = Laboratory.ID WHERE Patient.SEX = 'M' AND CAST(SUBSTR(Patient.Birthday,1,4) AS INTEGER) BETWEEN 1936 AND 1956 AND Laboratory.CPK >= 250;",True,challenging,0,,,6978,16.1
+108,1232,thrombosis_prediction,"Provide ID, sex and age of patient who has blood glucose (GLU) not within normal range but with total cholesterol(T-CHO) within normal range.","age = SUBTRACT(year(current_timestamp), year(Birthday)); blood glucose (GLU) not within normal range refers to GLU > = 180; total cholesterol(T-CHO) within normal range refers to `T-CHO` < 250; ","SELECT DISTINCT T1.ID, T1.SEX , STRFTIME('%Y', CURRENT_TIMESTAMP) - STRFTIME('%Y', T1.Birthday) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.GLU >= 180 AND T2.`T-CHO` < 250","SELECT Patient.ID AS ID, Patient.SEX AS sex, (CAST(strftime('%Y','now') AS INTEGER) - CAST(strftime('%Y', Patient.Birthday) AS INTEGER)) AS age
+FROM Laboratory
+JOIN Patient ON Laboratory.ID = Patient.ID
+WHERE Laboratory.GLU >= 180
+  AND Laboratory.""T-CHO"" < 250
+  AND Patient.SEX IS NOT NULL
+  AND Patient.SEX != ''
+ORDER BY Patient.ID ASC;",False,challenging,0,,,6978,20.8
+109,1235,thrombosis_prediction,What are the patient's diagnosis for those who has lower red blood blood cell? State their ID and age.,"patient's diagnosis refers to Diagnosis; lower red blood cell refers to RBC < 3.5; age = SUBTRACT(year(current_timestamp), year(Birthday)); ","SELECT DISTINCT T1.Diagnosis, T1.ID , STRFTIME('%Y', CURRENT_TIMESTAMP) -STRFTIME('%Y', T1.Birthday) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.RBC < 3.5","SELECT DISTINCT Patient.ID, (CAST(strftime('%Y','now') AS INTEGER) - CAST(strftime('%Y', Patient.Birthday) AS INTEGER)) AS Age, Patient.Diagnosis
+FROM Laboratory
+JOIN Patient ON Laboratory.ID = Patient.ID
+WHERE Laboratory.RBC < 3.5
+ORDER BY Patient.ID ASC;",False,moderate,0,,,6978,19.1
+110,1238,thrombosis_prediction,"Among the patients who were diagnosed with SLE, who is the oldest with normal hemoglobin level. Provide the ID and sex.","diagnosed with SLE refers to Diagnosis = 'SLE'; The larger the birthday value, the younger the person is, and vice versa; normal hemoglobin level refers to 10 < HGB < 17;","SELECT T1.ID, T1.SEX FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T1.Diagnosis = 'SLE' AND T2.HGB > 10 AND T2.HGB < 17 ORDER BY T1.Birthday ASC LIMIT 1","SELECT Patient.ID, Patient.SEX
+FROM Patient
+WHERE Patient.Diagnosis = 'SLE'
+  AND Patient.Birthday IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM Laboratory
+    WHERE Laboratory.ID = Patient.ID
+      AND Laboratory.HGB IS NOT NULL
+      AND Laboratory.HGB > 10
+      AND Laboratory.HGB < 17
+  )
+ORDER BY Patient.Birthday ASC
+LIMIT 1;",True,moderate,0,,,6978,18.5
+111,1239,thrombosis_prediction,Name the ID and age of patient with two or more laboratory examinations which show their hematoclit level exceeded the normal range.,"age = SUBTRACT(year(current_timestamp), year(Birthday)); patient with two or more laboratory examinations refers to COUNT(ID) > 2; hematoclit level exceeded the normal range refers to HCT > = 52;","SELECT DISTINCT T1.ID, STRFTIME('%Y', CURRENT_TIMESTAMP) - STRFTIME('%Y', T1.Birthday) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T1.ID IN ( SELECT ID FROM Laboratory WHERE HCT >= 52 GROUP BY ID HAVING COUNT(ID) >= 2 )","SELECT Patient.ID, (CAST(strftime('%Y','now') AS INTEGER) - CAST(strftime('%Y', Patient.Birthday) AS INTEGER)) AS age
+FROM Patient
+JOIN Laboratory ON Patient.ID = Laboratory.ID
+WHERE Patient.Birthday IS NOT NULL
+  AND Laboratory.HCT >= 52
+GROUP BY Patient.ID, Patient.Birthday
+HAVING COUNT(Laboratory.ID) >= 2
+ORDER BY Patient.ID ASC;",True,challenging,0,,,6978,19.2
+112,1241,thrombosis_prediction,"For patients with abnormal platelet level, state the number of patients with lower than normal range. How is it compare to the number of patients with higher than normal range?","abnormal platelet level refers to PLT <= 100 or PLT >= 400; platelet level lower than normal range refers to PLT < 100; calculation = SUBTRACT(SUM(PLT < 100), SUM(PLT > 400)); platelet level higher than normal range refers to PLT > 400;",SELECT SUM(CASE WHEN T2.PLT <= 100 THEN 1 ELSE 0 END) - SUM(CASE WHEN T2.PLT >= 400 THEN 1 ELSE 0 END) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID,"SELECT
+  COUNT(DISTINCT CASE WHEN PLT < 100 THEN ID END) AS lower_than_normal,
+  COUNT(DISTINCT CASE WHEN PLT > 400 THEN ID END) AS higher_than_normal,
+  COUNT(DISTINCT CASE WHEN PLT < 100 THEN ID END) - COUNT(DISTINCT CASE WHEN PLT > 400 THEN ID END) AS difference
+FROM Laboratory
+WHERE PLT <= 100 OR PLT >= 400;",False,challenging,0,,,6978,24.7
+113,1242,thrombosis_prediction,"For laboratory examinations take in 1984, list all patients below 50 years old with normal platelet level.","laboratory examinations take in 1984 refers to YEAR(Date) = '1984'; below 50 years old = SUBTRACT(year(current_timestamp), year(Birthday)) < 50; normal platelet level refers to PLT between 100 and 400; ","SELECT DISTINCT T1.ID FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.PLT BETWEEN 100 AND 400 AND STRFTIME('%Y', T2.Date) - STRFTIME('%Y', T1.Birthday) < 50 AND STRFTIME('%Y', T2.Date) = '1984'","SELECT Patient.ID
+FROM Laboratory
+JOIN Patient ON Laboratory.ID = Patient.ID
+WHERE strftime('%Y', Laboratory.Date) = '1984'
+  AND Patient.Birthday IS NOT NULL
+  AND (CAST(strftime('%Y','now') AS INTEGER) - CAST(strftime('%Y', Patient.Birthday) AS INTEGER)) < 50
+  AND Laboratory.PLT BETWEEN 100 AND 400
+GROUP BY Patient.ID
+ORDER BY Patient.ID ASC;",False,challenging,0,,,6978,22.1
+114,1243,thrombosis_prediction,"For all patients who are older than 55 years old, what is the percentage of female who has abnormal prothrombin time (PT)?","older than 55 years old = SUBTRACT(year(current_timestamp), year(Birthday)) > 55; abnormal prothrombin time (PT) refers to PT > = 14; percentage = DIVIDE(SUM(PT > = 14 AND SEX = 'F'), SUM(PT > = 14)) * 100; female refers to sex = 'F'; ","SELECT CAST(SUM(CASE WHEN T2.PT >= 14 AND T1.SEX = 'F' THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(CASE WHEN T2.PT >= 14 THEN 1 ELSE 0 END) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE STRFTIME('%Y', CURRENT_TIMESTAMP) - STRFTIME('%Y', T1.Birthday) > 55","SELECT (CAST(SUM(CASE WHEN p2.SEX = 'F' THEN 1 ELSE 0 END) AS REAL) / NULLIF(COUNT(*),0)) * 100 AS percentage
+FROM (
+  SELECT p.ID, p.SEX
+  FROM Patient p
+  WHERE p.Birthday IS NOT NULL
+    AND p.Birthday <> ''
+    AND p.SEX IS NOT NULL
+    AND p.SEX <> ''
+    AND (CAST(strftime('%Y','now') AS INTEGER) - CAST(strftime('%Y', p.Birthday) AS INTEGER)) > 55
+    AND EXISTS (
+      SELECT 1 FROM Laboratory l
+      WHERE l.ID = p.ID AND l.PT IS NOT NULL AND l.PT >= 14
+    )
+) AS p2",False,challenging,0,,,6978,28.3
+115,1247,thrombosis_prediction,"Among the male patients who have a normal level of white blood cells, how many of them have an abnormal fibrinogen level?",male patients refers to Sex = 'M'; normal level of white blood cells refers to WBC > 3.5 and WBC <9.0; abnormal fibrinogen level refers to FG < = 150 or FG > = 450; Don't compute repetitive ones.,SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.FG <= 150 OR T2.FG >= 450 AND T2.WBC > 3.5 AND T2.WBC < 9.0 AND T1.SEX = 'M',SELECT COUNT(DISTINCT Patient.ID) FROM Patient JOIN Laboratory ON Patient.ID = Laboratory.ID WHERE Patient.SEX = 'M' AND Laboratory.WBC > 3.5 AND Laboratory.WBC < 9.0 AND (Laboratory.FG <= 150 OR Laboratory.FG >= 450);,False,challenging,0,,,6978,14.8
+116,1251,thrombosis_prediction,How many patients with an Ig G higher than normal?,Ig G higher than normal refers to IGG >= 2000; Should consider DISTINCT in the final result;,SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID INNER JOIN Examination AS T3 ON T3.ID = T2.ID WHERE T2.IGG >= 2000,SELECT COUNT(DISTINCT ID) FROM Laboratory WHERE IGG >= 2000;,False,simple,0,,,6978,11.7
+117,1252,thrombosis_prediction,"Among the patients with a normal Ig G level, how many of them have symptoms?",normal Ig G level refers to IGG > 900 and IGG < 2000; have symptoms refers to Symptoms IS NOT NULL;,SELECT COUNT(T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID INNER JOIN Examination AS T3 ON T3.ID = T2.ID WHERE T2.IGG BETWEEN 900 AND 2000 AND T3.Symptoms IS NOT NULL,SELECT COUNT(DISTINCT Laboratory.ID) FROM Laboratory JOIN Examination ON Laboratory.ID = Examination.ID WHERE Laboratory.IGG > 900 AND Laboratory.IGG < 2000 AND Examination.Symptoms IS NOT NULL;,False,moderate,0,,,6978,16.6
+118,1254,thrombosis_prediction,How many patients with a normal Ig A level came to the hospital after 1990/1/1?,normal Ig A level refers to IGA > 80 AND IGA < 500; came to the hospital after 1990/1/1 refers to YEAR(`First Date`) > = 1990;,"SELECT COUNT(T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.IGA BETWEEN 80 AND 500 AND  strftime('%Y',  T1.`First Date`) > '1990'","SELECT COUNT(DISTINCT Patient.ID) FROM Laboratory JOIN Patient ON Laboratory.ID = Patient.ID WHERE Laboratory.IGA > 80 AND Laboratory.IGA < 500 AND Patient.""First Date"" >= '1990-01-01';",False,moderate,0,,,6978,12.2
+119,1255,thrombosis_prediction,"For the patients with an abnormal Ig M level, what is the most common disease they are diagnosed with?",abnormal Ig M level refers to IGM <=40 OR IGM >= 400; most common disease refers to MAX(COUNT(Diagnosis));,SELECT T1.Diagnosis FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.IGM NOT BETWEEN 40 AND 400 GROUP BY T1.Diagnosis ORDER BY COUNT(T1.Diagnosis) DESC LIMIT 1,"SELECT Examination.Diagnosis
+FROM Laboratory
+JOIN Examination ON Laboratory.ID = Examination.ID
+WHERE (Laboratory.IGM <= 40 OR Laboratory.IGM >= 400)
+  AND Examination.Diagnosis IS NOT NULL
+  AND Examination.Diagnosis <> ''
+GROUP BY Examination.Diagnosis
+ORDER BY COUNT(DISTINCT Examination.ID) DESC
+LIMIT 1;",False,moderate,0,,,6978,28.5
+120,1256,thrombosis_prediction,How many patients with a abnormal C-reactive protein don't have their data recorded?,abnormal C-reactive protein refers to CRP ='+'; don't have data recorded refers to Description IS NULL;,SELECT COUNT(T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE (T2.CRP = '+' ) AND T1.Description IS NULL,SELECT COUNT(DISTINCT Patient.ID) FROM Patient JOIN Laboratory ON Patient.ID = Laboratory.ID WHERE Laboratory.CRP = '+' AND Patient.Description IS NULL;,False,moderate,0,,,6978,13.2
+121,1257,thrombosis_prediction,"Among the patients whose creatinine level is abnormal, how many of them aren't 70 yet?","creatinine level is abnormal refers to CRE >= 1.5; aren't 70 yet refers to SUBTRACT((YEAR(CURDATE()), YEAR(Birthday))) < 70; ","SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.CRE >= 1.5 AND STRFTIME('%Y', Date('now')) - STRFTIME('%Y', T1.Birthday) < 70","SELECT COUNT(DISTINCT Patient.ID) FROM Laboratory JOIN Patient ON Laboratory.ID = Patient.ID WHERE Laboratory.CRE >= 1.5 AND Patient.Birthday IS NOT NULL AND trim(Patient.Birthday) <> '' AND (CAST(strftime('%Y','now') AS INTEGER) - CAST(substr(Patient.Birthday,1,4) AS INTEGER)) < 70;",True,challenging,0,,,6978,16.2
+122,1265,thrombosis_prediction,How many patients have a normal level of anti-ribonuclear protein and have been admitted to the hospital?,"normal level of anti-ribonuclear protein refers to RNP = '-', '+-'; And'-' means 'negative'; '+-' refers to '0'; admitted to the hospital refers to Admission = '+'; Should consider DISTINCT in the final result;",SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.RNP = 'negative' OR T2.RNP = '0' AND T1.Admission = '+',"SELECT COUNT(DISTINCT Patient.ID)
+FROM Laboratory
+JOIN Patient ON Laboratory.ID = Patient.ID
+WHERE Patient.Admission = '+'
+  AND Laboratory.RNP IN ('-','+-','0')",False,moderate,0,,,6978,18.9
+123,1267,thrombosis_prediction,"Among the patients with normal anti-SM, how many of them does not have thrombosis?","normal anti-SM refers to SM IN('-', '+-'); SM = 'negative' means '-'; SM = '0' means '+-'; SM = '1' means '+'; does not have thrombosis refers to Thrombosis = 0;","SELECT COUNT(T1.ID) FROM Examination AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.SM IN ('negative','0') AND T1.Thrombosis = 0","SELECT COUNT(DISTINCT Laboratory.ID) FROM Laboratory JOIN Examination ON Laboratory.ID = Examination.ID WHERE Laboratory.SM IN ('-', 'negative', '0', '+-') AND Examination.Thrombosis = 0;",False,moderate,0,,,6978,18.2
+124,1270,thrombosis_prediction,"Among the patients who has a normal anti-scl70, how many of them are female and does not have any symptom?","normal anti-scl70 refers to SC170 IN('negative', '0'); female refers to Sex = 'F'; does not have any symptom refers to symptoms IS NULL; Should consider DISTINCT in the final result;",SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID INNER JOIN Examination AS T3 ON T3.ID = T2.ID WHERE (T2.SC170 = 'negative' OR T2.SC170 = '0') AND T1.SEX = 'F' AND T3.Symptoms IS NULL,"SELECT COUNT(DISTINCT Patient.ID) FROM Laboratory JOIN Patient ON Laboratory.ID = Patient.ID JOIN Examination ON Laboratory.ID = Examination.ID WHERE Laboratory.SC170 IN ('negative','0') AND Patient.SEX = 'F' AND Examination.Symptoms IS NULL;",True,challenging,0,,,6978,13.9
+125,1275,thrombosis_prediction,"Among the patients who has a normal level of anti-centromere and a normal level of anti-SSB, how many of them are male?","normal level of anti-centromere refers to CENTROMEA IN('-', '+-'); normal level of anti-SSB refers to SSB IN('-', '+-'); male refers to Sex = 'M'; Should consider DISTINCT in the final result;","SELECT COUNT(DISTINCT T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.CENTROMEA IN ('negative', '0') AND T2.SSB IN ('negative', '0') AND T1.SEX = 'M'","SELECT COUNT(DISTINCT Patient.ID) FROM Patient JOIN Laboratory ON Patient.ID = Laboratory.ID WHERE Laboratory.CENTROMEA IN ('-', '+-') AND Laboratory.SSB IN ('-', '+-') AND Patient.SEX = 'M';",False,moderate,0,,,6978,11.7
+126,1281,thrombosis_prediction,"Among the patients who have an abnormal level of glutamic oxaloacetic transaminase, when was the youngest of them born?","abnormal level of glutamic oxaloacetic transaminase refers to GOT > = 60; The larger the birthday value, the younger the person is, and vice versa;",SELECT T1.Birthday FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID WHERE T2.GOT >= 60 ORDER BY T1.Birthday DESC LIMIT 1,SELECT MAX(Patient.Birthday) FROM Laboratory JOIN Patient ON Laboratory.ID = Patient.ID WHERE Laboratory.GOT >= 60 AND Patient.Birthday IS NOT NULL;,True,moderate,0,,,6978,14.2
+127,1302,thrombosis_prediction,"For the patients with a normal range of creatinine phosphokinase, how many of them have a positive measure of degree of coagulation?",normal range of creatinine phosphokinase refers to CPK < 250; positive measure of degree of coagulation refers to KCT = '+' or RVVT = '+' or LAC = '+' ;,SELECT COUNT(T1.ID) FROM Patient AS T1 INNER JOIN Laboratory AS T2 ON T1.ID = T2.ID INNER JOIN Examination AS T3 ON T1.ID = T3.ID WHERE T2.CPK < 250 AND (T3.KCT = '+' OR T3.RVVT = '+' OR T3.LAC = '+'),"SELECT COUNT(DISTINCT l.ID)
+FROM Laboratory l
+WHERE l.CPK < 250
+  AND EXISTS (
+    SELECT 1 FROM Examination e
+    WHERE e.ID = l.ID
+      AND (e.KCT = '+' OR e.RVVT = '+' OR e.LAC = '+')
+  );",False,challenging,0,,,6978,17.4
+128,1025,european_football_2,Give the name of the league had the most goals in the 2016 season?,"league that had the most goals refers to MAX(SUM(home_team_goal, away_team_goal)); 2016 season refers to season = '2015/2016';",SELECT t2.name FROM Match AS t1 INNER JOIN League AS t2 ON t1.league_id = t2.id WHERE t1.season = '2015/2016' GROUP BY t2.name ORDER BY SUM(t1.home_team_goal + t1.away_team_goal) DESC LIMIT 1,"SELECT League.name
+FROM Match
+JOIN League ON Match.league_id = League.id
+WHERE season = '2015/2016'
+  AND home_team_goal IS NOT NULL
+  AND away_team_goal IS NOT NULL
+GROUP BY League.id, League.name
+ORDER BY SUM(home_team_goal + away_team_goal) DESC
+LIMIT 1;",True,moderate,0,,,18657,12.6
+129,1028,european_football_2,"In Scotland Premier League, which away team won the most during the 2010 season?","Final result should return the Team.team_long_name; Scotland Premier League refers to League.name = 'Scotland Premier League'; away team refers to away_team_api_id; away team that won the most refers to MAX(SUBTRACT(away_team_goal, home_team_goal) > 0); 2010 season refers to season = '2009/2010'; won the most refers to MAX(COUNT(*));",SELECT teamInfo.team_long_name FROM League AS leagueData INNER JOIN Match AS matchData ON leagueData.id = matchData.league_id INNER JOIN Team AS teamInfo ON matchData.away_team_api_id = teamInfo.team_api_id WHERE leagueData.name = 'Scotland Premier League' AND matchData.season = '2009/2010' AND matchData.away_team_goal - matchData.home_team_goal > 0 GROUP BY matchData.away_team_api_id ORDER BY COUNT(*) DESC LIMIT 1,"SELECT Team.team_long_name
+FROM Match
+JOIN League ON Match.league_id = League.id
+JOIN Team ON Match.away_team_api_id = Team.team_api_id
+WHERE League.name = 'Scotland Premier League'
+  AND Match.season = '2009/2010'
+  AND Match.away_team_goal > Match.home_team_goal
+GROUP BY Team.team_long_name
+ORDER BY COUNT(Match.id) DESC;",False,challenging,0,,,18657,22.0
+130,1029,european_football_2,What are the speed in which attacks are put together of the top 4 teams with the highest build Up Play Speed?,speed in which attacks are put together refers to buildUpPlaySpeed;highest build up play speed refers to MAX(buildUpPlaySpeed),SELECT t1.buildUpPlaySpeed FROM Team_Attributes AS t1 INNER JOIN Team AS t2 ON t1.team_api_id = t2.team_api_id ORDER BY t1.buildUpPlaySpeed ASC LIMIT 4,"SELECT MAX(Team_Attributes.buildUpPlaySpeed) AS buildUpPlaySpeed
+FROM Team_Attributes
+JOIN Team ON Team_Attributes.team_api_id = Team.team_api_id
+WHERE Team_Attributes.buildUpPlaySpeed IS NOT NULL
+  AND Team_Attributes.team_api_id IS NOT NULL
+GROUP BY Team.team_api_id, Team.team_long_name
+ORDER BY MAX(Team_Attributes.buildUpPlaySpeed) DESC
+LIMIT 4;",False,moderate,0,,,18657,17.6
+131,1030,european_football_2,Give the name of the league had the most matches end as draw in the 2016 season?,most matches end as draw refers to MAX(SUM(home_team_goal = away_team_goal)); 2016 season refers to season = '2015/2016';,SELECT t2.name FROM Match AS t1 INNER JOIN League AS t2 ON t1.league_id = t2.id WHERE t1.season = '2015/2016' AND t1.home_team_goal = t1.away_team_goal GROUP BY t2.name ORDER BY COUNT(t1.id) DESC LIMIT 1,"SELECT l.name
+FROM League l
+JOIN Match m ON m.league_id = l.id
+WHERE m.season = '2015/2016' AND m.home_team_goal = m.away_team_goal
+GROUP BY l.name
+HAVING COUNT(*) = (
+  SELECT MAX(draws) FROM (
+    SELECT COUNT(*) AS draws FROM Match
+    WHERE season = '2015/2016' AND home_team_goal = away_team_goal
+    GROUP BY league_id
+  )
+);",True,moderate,0,,,18657,17.4
+132,1031,european_football_2,"At present, calculate for the player's age who have a sprint speed of no less than 97 between 2013 to 2015.","players age at present = SUBTRACT((DATETIME(), birthday)); sprint speed of no less than 97 refers to sprint_speed > = 97; between 2013 to 2015 refers to YEAR(date) > = '2013' AND YEAR(date) < = '2015'; ","SELECT DISTINCT DATETIME() - T2.birthday age FROM Player_Attributes AS t1 INNER JOIN Player AS t2 ON t1.player_api_id = t2.player_api_id WHERE STRFTIME('%Y',t1.`date`) >= '2013' AND STRFTIME('%Y',t1.`date`) <= '2015' AND t1.sprint_speed >= 97","SELECT (CAST(strftime('%Y','now') AS INTEGER) - CAST(substr(Player.birthday,1,4) AS INTEGER) - (strftime('%m-%d','now') < substr(Player.birthday,6,5))) AS age
+FROM Player
+JOIN Player_Attributes ON Player.player_api_id = Player_Attributes.player_api_id
+WHERE Player_Attributes.sprint_speed >= 97
+  AND substr(Player_Attributes.date,1,4) BETWEEN '2013' AND '2015'
+  AND Player.birthday IS NOT NULL
+GROUP BY Player.id, Player.player_name, Player.birthday;",False,challenging,0,,,18657,20.2
+133,1032,european_football_2,Give the name of the league with the highest matches of all time and how many matches were played in the said league., league with highest matches of all time refers to MAX(COUNT(league_id));,"SELECT t2.name, t1.max_count FROM League AS t2 JOIN (SELECT league_id, MAX(cnt) AS max_count FROM (SELECT league_id, COUNT(id) AS cnt FROM Match GROUP BY league_id) AS subquery) AS t1 ON t1.league_id = t2.id","SELECT name, match_count
+FROM (
+  SELECT League.name AS name, COUNT(Match.id) AS match_count
+  FROM League
+  LEFT JOIN Match ON League.id = Match.league_id
+  GROUP BY League.id, League.name
+) AS t
+WHERE match_count = (
+  SELECT MAX(cnt) FROM (
+    SELECT COUNT(Match.id) AS cnt
+    FROM League
+    LEFT JOIN Match ON League.id = Match.league_id
+    GROUP BY League.id
+  )
+);",False,moderate,0,,,18657,15.5
+134,1035,european_football_2,Give the team_fifa_api_id of teams with more than 50 but less than 60 build-up play speed.,teams with more than 50 but less than 60 build-up play speed refers to buildUpPlaySpeed >50 AND buildUpPlaySpeed <60; ,SELECT DISTINCT team_fifa_api_id FROM Team_Attributes WHERE buildUpPlaySpeed > 50 AND buildUpPlaySpeed < 60,"SELECT team_fifa_api_id
+FROM Team_Attributes
+WHERE buildUpPlaySpeed IS NOT NULL
+  AND buildUpPlaySpeed > 50
+  AND buildUpPlaySpeed < 60
+GROUP BY team_fifa_api_id
+ORDER BY team_fifa_api_id ASC;",True,simple,0,,,18657,9.4
+135,1036,european_football_2,List the long name of teams with above-average build-up play passing in 2012.,"long name of teams refers to team_long_name; build-up play passing refers to buildUpPlayPassing; above-average build-up play passing = buildUpPlayPassing > DIVIDE(SUM(buildUpPlayPassing), COUNT(team_long_name) WHERE buildUpPlayPassing IS NOT NULL); in 2012 refers to strftime('%Y', date) = '2012'; ","SELECT DISTINCT t4.team_long_name FROM Team_Attributes AS t3 INNER JOIN Team AS t4 ON t3.team_api_id = t4.team_api_id WHERE SUBSTR(t3.`date`, 1, 4) = '2012' AND t3.buildUpPlayPassing > ( SELECT CAST(SUM(t2.buildUpPlayPassing) AS REAL) / COUNT(t1.id) FROM Team AS t1 INNER JOIN Team_Attributes AS t2 ON t1.team_api_id = t2.team_api_id WHERE STRFTIME('%Y',t2.`date`) = '2012')","WITH team_avgs AS (
+  SELECT Team.team_long_name AS team_long_name,
+         AVG(Team_Attributes.buildUpPlayPassing) AS team_avg
+  FROM Team_Attributes
+  JOIN Team ON Team_Attributes.team_api_id = Team.team_api_id
+  WHERE strftime('%Y', Team_Attributes.date) = '2012'
+    AND Team_Attributes.buildUpPlayPassing IS NOT NULL
+  GROUP BY Team.team_long_name
+)
+SELECT team_long_name
+FROM team_avgs
+WHERE team_avg > (SELECT AVG(team_avg) FROM team_avgs)
+ORDER BY team_avg DESC;",True,challenging,0,,,18657,15.5
+136,1037,european_football_2,"Calculate the percentage of players who prefer left foot, who were born between 1987 and 1992.","players who prefer left foot refers to preferred_foot = 'left'; percentage of players who prefer left foot = DIVIDE(MULTIPLY((SUM(preferred_foot = 'left'), 100)), COUNT(player_fifa_api_id)); born between 1987 and 1992 refers to YEAR(birthday) BETWEEN '1987' AND '1992';","SELECT CAST(COUNT(CASE WHEN t2.preferred_foot = 'left' THEN t1.id ELSE NULL END) AS REAL) * 100 / COUNT(t1.id) percent FROM Player AS t1 INNER JOIN Player_Attributes AS t2 ON t1.player_api_id = t2.player_api_id WHERE SUBSTR(t1.birthday, 1, 4) BETWEEN '1987' AND '1992'","WITH players AS (
+  SELECT DISTINCT player_fifa_api_id
+  FROM Player
+  WHERE birthday IS NOT NULL
+    AND substr(birthday,1,4) BETWEEN '1987' AND '1992'
+),
+left_players AS (
+  SELECT DISTINCT p.player_fifa_api_id
+  FROM Player p
+  JOIN Player_Attributes pa ON p.player_fifa_api_id = pa.player_fifa_api_id
+  WHERE p.birthday IS NOT NULL
+    AND substr(p.birthday,1,4) BETWEEN '1987' AND '1992'
+    AND pa.preferred_foot = 'left'
+)
+SELECT CASE WHEN (SELECT COUNT(*) FROM players)=0 THEN 0.0
+            ELSE (CAST((SELECT COUNT(*) FROM left_players) AS REAL)*100.0)/(SELECT COUNT(*) FROM players)
+       END AS percentage;",False,challenging,0,,,18657,23.8
+137,1039,european_football_2,Find the average number of long-shot done by Ahmed Samir Farag.,"average number of long shot = DIVIDE(SUM(long_shots), COUNT(player_fifa_api_id));",SELECT CAST(SUM(t2.long_shots) AS REAL) / COUNT(t2.`date`) FROM Player AS t1 INNER JOIN Player_Attributes AS t2 ON t1.player_api_id = t2.player_api_id WHERE t1.player_name = 'Ahmed Samir Farag',SELECT AVG(Player_Attributes.long_shots) FROM Player JOIN Player_Attributes ON Player.player_api_id = Player_Attributes.player_api_id WHERE Player.player_name = 'Ahmed Samir Farag' AND Player_Attributes.long_shots IS NOT NULL;,True,simple,0,,,18657,11.6
+138,1040,european_football_2,List the top 10 players' names whose heights are above 180 in descending order of average heading accuracy.,"heights are above 180 refers to Player.height > 180; average heading accuracy = DIVIDE(SUM(heading_accuracy), COUNT(player_fifa_api_id));",SELECT t1.player_name FROM Player AS t1 INNER JOIN Player_Attributes AS t2 ON t1.player_api_id = t2.player_api_id WHERE t1.height > 180 GROUP BY t1.id ORDER BY CAST(SUM(t2.heading_accuracy) AS REAL) / COUNT(t2.`player_fifa_api_id`) DESC LIMIT 10,"SELECT Player.player_name
+FROM Player
+JOIN Player_Attributes ON Player.player_api_id = Player_Attributes.player_api_id
+WHERE Player.height > 180
+GROUP BY Player.player_api_id, Player.player_name
+ORDER BY AVG(Player_Attributes.heading_accuracy) DESC
+LIMIT 10;",True,moderate,0,,,18657,12.5
+139,1042,european_football_2,List the name of leagues in which the average goals by the home team is higher than the away team in the 2009/2010 season.,name of league refers to League.name; average goals by the home team is higher than the away team = AVG(home_team_goal) > AVG(away_team_goal); AVG(xx_goal) = SUM(xx_goal) / COUNT(DISTINCT Match.id); 2009/2010 season refers to season = '2009/2010',SELECT t1.name FROM League AS t1 INNER JOIN Match AS t2 ON t1.id = t2.league_id WHERE t2.season = '2009/2010' GROUP BY t1.name HAVING (CAST(SUM(t2.home_team_goal) AS REAL) / COUNT(DISTINCT t2.id)) - (CAST(SUM(t2.away_team_goal) AS REAL) / COUNT(DISTINCT t2.id)) > 0,"SELECT League.name
+FROM Match
+JOIN League ON Match.league_id = League.id
+WHERE Match.season = '2009/2010'
+  AND Match.home_team_goal IS NOT NULL
+  AND Match.away_team_goal IS NOT NULL
+GROUP BY League.name
+HAVING AVG(Match.home_team_goal) > AVG(Match.away_team_goal)
+ORDER BY League.name ASC;",True,challenging,0,,,18657,11.3
+140,1044,european_football_2,List the football players with a birthyear of 1970 and a birthmonth of October.,"players with a birthyear of 1970 and a birthmonth of October refers to substr(birthday,1,7) AS 'year-month',WHERE year = '1970' AND month = '10';","SELECT player_name FROM Player WHERE SUBSTR(birthday, 1, 7) = '1970-10'","SELECT player_name FROM Player WHERE substr(birthday,1,7) = '1970-10';",True,simple,0,,,18657,7.8
+141,1048,european_football_2,What is the overall rating of the football player Gabriel Tamas in year 2011?,"in year 2011 refers to strftime('%Y', date) = '2011';","SELECT t2.overall_rating FROM Player AS t1 INNER JOIN Player_Attributes AS t2 ON t1.player_api_id = t2.player_api_id WHERE t1.player_name = 'Gabriel Tamas' AND strftime('%Y', t2.date) = '2011'","SELECT Player_Attributes.overall_rating
+FROM Player
+JOIN Player_Attributes ON Player.player_api_id = Player_Attributes.player_api_id
+WHERE Player.player_name = 'Gabriel Tamas'
+  AND strftime('%Y', Player_Attributes.date) = '2011'
+  AND Player_Attributes.overall_rating IS NOT NULL
+ORDER BY Player_Attributes.date DESC;",True,simple,0,,,18657,9.5
+142,1057,european_football_2,Calculate the average home team goal in the 2010/2011 season in the country of Poland.,average home team goal = AVG(home_team_goal)= SUM(home_team_goal) / COUNT(DISTINCT Match.id) WHERE name = 'Poland' and season = '2010/2011';,SELECT CAST(SUM(t2.home_team_goal) AS REAL) / COUNT(t2.id) FROM Country AS t1 INNER JOIN Match AS t2 ON t1.id = t2.country_id WHERE t1.name = 'Poland' AND t2.season = '2010/2011',SELECT AVG(Match.home_team_goal) FROM Match JOIN League ON Match.league_id = League.id WHERE Match.season = '2010/2011' AND League.name LIKE '%Poland%';,True,moderate,0,,,18657,13.3
+143,1058,european_football_2,Who has the highest average finishing rate between the highest and shortest football player?,finishing rate refers to finishing; highest average finishing rate = MAX(AVG(finishing)); highest football player refers to MAX(height); shortest football player refers to MIN(height);,"SELECT A FROM ( SELECT AVG(finishing) result, 'Max' A FROM Player AS T1 INNER JOIN Player_Attributes AS T2 ON T1.player_api_id = T2.player_api_id WHERE T1.height = ( SELECT MAX(height) FROM Player ) UNION SELECT AVG(finishing) result, 'Min' A FROM Player AS T1 INNER JOIN Player_Attributes AS T2 ON T1.player_api_id = T2.player_api_id WHERE T1.height = ( SELECT MIN(height) FROM Player ) ) ORDER BY result DESC LIMIT 1","SELECT p.player_name
+FROM Player p
+JOIN Player_Attributes pa ON p.player_api_id = pa.player_api_id
+WHERE p.height IN ((SELECT MAX(height) FROM Player),(SELECT MIN(height) FROM Player))
+GROUP BY p.player_api_id, p.player_name
+HAVING AVG(pa.finishing) = (
+  SELECT MAX(avg_fin) FROM (
+    SELECT AVG(pa2.finishing) AS avg_fin
+    FROM Player p2
+    JOIN Player_Attributes pa2 ON p2.player_api_id = pa2.player_api_id
+    WHERE p2.height IN ((SELECT MAX(height) FROM Player),(SELECT MIN(height) FROM Player))
+    GROUP BY p2.player_api_id
+  )
+)
+ORDER BY AVG(pa.finishing) DESC;",False,challenging,0,,,18657,19.1
+144,1068,european_football_2,"From 2010 to 2015, what was the average overall rating of players who are higher than 170?","from 2010 to 2015 refers to strftime('%Y', date) >= '2010' AND <= '2015'; average overall rating = SUM(t2.overall_rating)/ COUNT(t2.id); higher than 170 refers to Player.height > 170;","SELECT CAST(SUM(t2.overall_rating) AS REAL) / COUNT(t2.id) FROM Player AS t1 INNER JOIN Player_Attributes AS t2 ON t1.player_api_id = t2.player_api_id WHERE t1.height > 170 AND STRFTIME('%Y',t2.`date`) >= '2010' AND STRFTIME('%Y',t2.`date`) <= '2015'","SELECT AVG(Player_Attributes.overall_rating) FROM Player_Attributes JOIN Player ON Player.player_api_id = Player_Attributes.player_api_id WHERE strftime('%Y', Player_Attributes.date) BETWEEN '2010' AND '2015' AND Player.height > 170 AND Player_Attributes.overall_rating IS NOT NULL;",False,moderate,0,,,18657,13.0
+145,1076,european_football_2,"What is the difference of the average ball control score between Abdou Diallo and Aaron Appindangoye
+?","difference of the average ball control = SUBTRACT(AVG(ball_control WHERE player_name = 'Abdou Diallo'), AVG(ball_control WHERE player_name = 'Aaron Appindangoye')); AVG(ball_control WHERE player_name = 'XX XX') = SUM(CASE WHEN player_name = 'XX XX' THEN ball_control ELSE 0 END) / COUNT(CASE WHEN player_name = 'XX XX' THEN id ELSE NULL END)",SELECT CAST(SUM(CASE WHEN t1.player_name = 'Abdou Diallo' THEN t2.ball_control ELSE 0 END) AS REAL) / COUNT(CASE WHEN t1.player_name = 'Abdou Diallo' THEN t2.id ELSE NULL END) - CAST(SUM(CASE WHEN t1.player_name = 'Aaron Appindangoye' THEN t2.ball_control ELSE 0 END) AS REAL) / COUNT(CASE WHEN t1.player_name = 'Aaron Appindangoye' THEN t2.id ELSE NULL END) FROM Player AS t1 INNER JOIN Player_Attributes AS t2 ON t1.player_api_id = t2.player_api_id,"SELECT
+  AVG(CASE WHEN p.player_name = 'Abdou Diallo' THEN pa.ball_control END)
+  - AVG(CASE WHEN p.player_name = 'Aaron Appindangoye' THEN pa.ball_control END) AS diff
+FROM Player_Attributes pa
+JOIN Player p ON pa.player_api_id = p.player_api_id
+WHERE p.player_name IN ('Abdou Diallo', 'Aaron Appindangoye') AND pa.ball_control IS NOT NULL;",True,challenging,0,,,18657,12.6
+146,1078,european_football_2,"Which player is older, Aaron Lennon or Abdelaziz Barrada?","The larger the birthday value, the younger the person is, and vice versa;","SELECT player_name FROM Player WHERE player_name IN ('Aaron Lennon', 'Abdelaziz Barrada') ORDER BY birthday ASC LIMIT 1","SELECT player_name FROM Player WHERE player_name IN ('Aaron Lennon', 'Abdelaziz Barrada') ORDER BY birthday ASC LIMIT 1;",True,simple,0,,,18657,7.7
+147,1079,european_football_2,Which player is the tallest?,tallest player refers to MAX(height);,SELECT player_name FROM Player ORDER BY height DESC LIMIT 1,SELECT player_name FROM Player WHERE height IS NOT NULL AND height = (SELECT MAX(height) FROM Player WHERE height IS NOT NULL) ORDER BY height DESC;,True,simple,0,,,18657,7.3
+148,1080,european_football_2,"Among the players whose preferred foot was the left foot when attacking, how many of them would remain in his position when the team attacked?",preferred foot when attacking was the left refers to preferred_foot = 'left'; players who would remain in his position when the team attacked refers to attacking_work_rate = 'low';,SELECT COUNT(player_api_id) FROM Player_Attributes WHERE preferred_foot = 'left' AND attacking_work_rate = 'low',SELECT COUNT(DISTINCT player_api_id) FROM Player_Attributes WHERE preferred_foot = 'left' AND attacking_work_rate = 'low';,False,moderate,0,,,18657,13.0
+149,1084,european_football_2,"Among the players born before the year 1986, how many of them would remain in his position and defense while the team attacked?","players born before the year 1986 refers to strftime('%Y', birthday)<'1986'; players who would remain in his position and defense while the team attacked refers to defensive_work_rate = 'high'; Should consider DISTINCT in the final result;","SELECT COUNT(DISTINCT t1.player_name) FROM Player AS t1 INNER JOIN Player_Attributes AS t2 ON t1.player_api_id = t2.player_api_id WHERE STRFTIME('%Y',t1.birthday) < '1986' AND t2.defensive_work_rate = 'high'","SELECT COUNT(DISTINCT Player.player_api_id) FROM Player JOIN Player_Attributes ON Player.player_api_id = Player_Attributes.player_api_id WHERE strftime('%Y', Player.birthday) < '1986' AND Player_Attributes.defensive_work_rate = 'high';",True,challenging,0,,,18657,10.9
