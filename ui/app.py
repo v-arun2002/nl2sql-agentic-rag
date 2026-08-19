@@ -95,11 +95,21 @@ st.markdown(
 }
 .stApp { background: var(--ink); }
 .block-container { padding-top: 2.2rem !important; max-width: 1320px; }
-html, body, [class*="st-"], .stMarkdown, p, label, span, div {
+/* Scoped to text-bearing elements. This was `[class*="st-"], span, div`, which
+   also matched Streamlit's Material icon spans and overrode the ligature font
+   they depend on -- the cause of the "uploadupload" button and the expander's
+   "_arrow_right". Inheritance from .stApp covers ordinary widget text, so the
+   broad selector was buying nothing. */
+html, body, .stApp, .stMarkdown, p, label, li, h1, h2, h3, h4,
+button, input, textarea, select, [data-baseweb="select"] {
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 .masthead { border-bottom: 1px solid var(--line); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
-.masthead h1 { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text); margin: 0 0 .3rem 0; }
+/* font-family repeated here deliberately: Streamlit styles markdown headings
+   explicitly, and an explicit rule beats an inherited one no matter how the
+   base selector above is written. */
+.masthead h1 { font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 1.65rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text); margin: 0 0 .3rem 0; }
 .masthead .sub { font-family: 'IBM Plex Mono', monospace; font-size: .78rem; color: var(--muted); }
 .masthead .sub b { color: var(--teal); font-weight: 600; }
 .eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: .68rem; letter-spacing: .16em;
@@ -549,11 +559,12 @@ with c1:
 with c2:
     question = st.text_area("Question", value=EXAMPLES.get(db_id, ""), height=76)
 
-# A checkbox rather than st.expander: Streamlit's expander relies on a material
-# icon font that renders as raw ligature text when it fails to load, colliding
-# with the label.
+# st.expander, restored. It was previously a checkbox because the expander's
+# chevron rendered as the raw ligature "_arrow_right" beside the label -- which
+# turned out to be this stylesheet overriding the icon font, not a Streamlit
+# problem. Fixed at the source in the CSS above, so the expander works.
 evidence = ""
-if st.checkbox("Add a domain hint"):
+with st.expander("Add a domain hint"):
     st.markdown(
         '<div class="hint-note">BIRD ships a hint field carrying domain definitions. '
         "Ignored unless the server runs with INCLUDE_EVIDENCE_IN_PROMPTS=true — the "

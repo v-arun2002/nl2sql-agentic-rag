@@ -173,7 +173,7 @@ real sample values alongside column names eliminated this category entirely.
 | LLM | Multi-provider (OpenAI / Groq / Gemini), selected per agent role | see below |
 | Retrieval | Chroma + ONNX `all-MiniLM-L6-v2` | local embeddings, no API cost; the ONNX build rather than the PyTorch one, which cuts ~2GB of dependency and fits a 1GB container |
 | Backend | FastAPI | exposes the graph as `POST /query` |
-| Demo UI | Streamlit | shows generated SQL, results, and the full agent trace |
+| Demo UI | Streamlit | generated SQL, results and the full agent trace, against the bundled BIRD databases **or your own SQLite upload** (50MB cap, session-scoped with automatic eviction, queried read-only) |
 | Ops | Docker, docker-compose, GitHub Actions | containerised, CI-gated regression tests |
 
 **Provider routing is per-role, not global.** The classifier picks one of four
@@ -264,6 +264,16 @@ rejecting an oversized upload in `src/uploads.py` happens after the memory has
 already been spent — and the widget advertises the server's limit regardless of
 what the app says, which is how it came to promise "200MB per file" beside a note
 claiming 50MB.
+
+**Upload embeddings are stored apart from the shipped index.** `chroma_db/` is a
+committed build artifact — the deployed app cannot rebuild it, because not all the
+BIRD `.sqlite` files ship — while upload segments are per-session garbage. They
+initially shared one directory, which meant every visitor's upload dirtied a
+tracked path and cleanup had to reason about two lifecycles in one place. Uploads
+now write to their own Chroma store next to the uploaded files
+(`UPLOAD_CHROMA_DIR`, defaulting inside the temp upload directory), so a database
+and its embeddings are created and destroyed together and nothing ephemeral is
+written inside the repository.
 
 Uploads are session-scoped and stored in the OS temp directory, so they disappear
 when the container restarts. They require the pipeline to share a filesystem with
@@ -395,6 +405,22 @@ databases on disk rather than trusting a local test run. Now pinned to two
 `superhero` cases that the 500-question baseline already answers correctly with
 `retries: 0`, so a failure means a real regression rather than a borderline
 question flipping.
+
+**`mode=ro` alone did not make the database read-only.** Opening uploads with
+`file:...?mode=ro` blocks writes to the main database, and it is easy to stop
+there and call the problem solved. But `ATTACH` is itself a *read* — attaching a
+second database is not a write to the first — so a read-only connection permits
+it, and the attached database carries its own permissions. A generated
+`ATTACH '...' AS w; INSERT INTO w.t ...` would therefore have executed. Found by
+testing the escape rather than the flag: the `ATTACH` succeeded, which is the
+correct behaviour and the reason the hole exists. `PRAGMA query_only` is what
+closes it, because it refuses writes at the statement level across every database
+on the connection. Both are now set in `src/db/connection.py`, and the test suite
+asserts the attached-write case specifically, against the attached file's bytes.
+
+The general lesson is the one this project keeps relearning: a security control
+has to be tested by attempting the thing it forbids. Asserting that the connection
+was *opened* with `mode=ro` would have passed while the hole was wide open.
 
 **A global `font-family` rule broke every Material icon in the app.** The upload
 button read `uploadupload`, and the expander had previously shown `_arrow_right`.

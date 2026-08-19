@@ -45,6 +45,16 @@ TTL_SECONDS = int(os.getenv("UPLOAD_TTL_SECONDS", str(60 * 60)))  # 1 hour
 UPLOAD_ROOT = Path(os.getenv("UPLOAD_DIR") or (Path(tempfile.gettempdir()) / "nl2sql_uploads"))
 REGISTRY_PATH = UPLOAD_ROOT / "registry.json"
 
+# Uploads get their own Chroma store, deliberately not settings.chroma_persist_dir.
+# The shipped index is a committed build artifact -- the deployed app cannot
+# rebuild it, since the BIRD .sqlite files aren't all there -- while upload
+# segments are per-session garbage. Sharing one directory meant every upload
+# dirtied a tracked path, and reaping orphans had to reason about two lifecycles
+# in one place. Defaults inside UPLOAD_ROOT so the two halves of an upload (the
+# database and its embeddings) are created and destroyed together, and nothing
+# ephemeral is ever written inside the repository.
+CHROMA_DIR = Path(os.getenv("UPLOAD_CHROMA_DIR") or (UPLOAD_ROOT / "chroma"))
+
 SQLITE_MAGIC = b"SQLite format 3\x00"
 ALLOWED_SUFFIXES = {".sqlite", ".db", ".sqlite3", ".db3"}
 
@@ -91,6 +101,19 @@ def _entry_path(entry: dict) -> Path:
     return Path(entry["path"])
 
 
+def store():
+    """
+    The Chroma store for uploads, which is never the shipped one.
+
+    Imported lazily on purpose: constructing it loads the embedding model, and
+    the executor imports this module on every query only to resolve a path.
+    """
+    from src.retrieval.vector_store import SchemaVectorStore
+
+    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+    return SchemaVectorStore(persist_dir=str(CHROMA_DIR))
+
+
 # --------------------------------------------------------------------------
 # eviction
 # --------------------------------------------------------------------------
@@ -107,12 +130,8 @@ def _delete_entry(db_id: str, entry: dict) -> None:
     except Exception:
         pass
 
-    # Imported lazily: constructing the store loads the embedding model, which
-    # is wasted work for callers that only ever resolve paths.
     try:
-        from src.retrieval.vector_store import SchemaVectorStore
-
-        SchemaVectorStore().delete_schema(db_id)
+        store().delete_schema(db_id)
     except Exception:
         pass
 
@@ -238,10 +257,9 @@ def register(data: bytes, filename: str, session_id: str, on_progress=None) -> d
 
     try:
         from data.build_schema_index import introspect_sqlite
-        from src.retrieval.vector_store import SchemaVectorStore
 
         schema = introspect_sqlite(str(target))
-        SchemaVectorStore().index_schema(db_id, schema, on_progress=on_progress)
+        store().index_schema(db_id, schema, on_progress=on_progress)
     except Exception as e:
         # Never leave a half-indexed database registered: retrieval would
         # return a partial schema and the generator would invent the rest,
@@ -249,9 +267,7 @@ def register(data: bytes, filename: str, session_id: str, on_progress=None) -> d
         # a scar from.
         shutil.rmtree(target_dir, ignore_errors=True)
         try:
-            from src.retrieval.vector_store import SchemaVectorStore
-
-            SchemaVectorStore().delete_schema(db_id)
+            store().delete_schema(db_id)
         except Exception:
             pass
         raise UploadError("Could not index that schema: %s" % e)
