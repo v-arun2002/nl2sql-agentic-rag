@@ -11,3 +11,7 @@ pydantic>=2.9.0
 python-dotenv>=1.0.0
 pytest>=8.3.0
 requests>=2.32.0
+# Upper bound is load-bearing: mcp 2.x renamed FastMCP to MCPServer and
+# mcp.server.fastmcp is gone, so mcp_server/server.py will not import under it.
+mcp>=1.2.0,<2
+httpx>=0.27.0

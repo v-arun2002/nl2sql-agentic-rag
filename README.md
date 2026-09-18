@@ -308,13 +308,22 @@ docker compose up --build
 
 ## What this doesn't do
 
-Honest limits, from the failure analysis in `eval/results.csv`:
+Honest limits, mostly from the failure analysis in `eval/results.csv`:
 
 **The correction loop cannot catch wrong-but-valid SQL.** On `california_schools`,
 every failure had `retries: 0` — the SQL executed cleanly and returned rows, just
 the wrong ones. There is no error to classify when a query succeeds with a
 plausible wrong answer. Error-classification routing fixes *broken* SQL, not
 *incorrect* SQL.
+
+**A concrete instance of this same limitation surfaced through the MCP server**
+(`mcp_server/server.py`) on a fresh, non-benchmark question — asked "Which
+constructor won the most races?" against `formula_1`, the agent correctly
+identified the winner (`constructorId = 6`, i.e. Ferrari, 229 wins to McLaren's
+178 — verified directly against the database) but never joined to `constructors`
+to return the name, returning a bare foreign key instead. `success` was `true`,
+`retries` was `0`: valid, complete, and semantically incomplete — the exact
+failure mode above, now demonstrated outside the fixed eval set as well.
 
 **Some questions are unanswerable schema-only by construction.** "Total enrollment
 over 500" requires knowing it means the sum of two specific columns. That
