@@ -1,1 +1,0 @@
-select 'stg_eval_runs' as model_name, count(*) as n from NL2SQL_ANALYTICS.STAGING.stg_eval_runs union all select 'stg_eval_results', count(*) from NL2SQL_ANALYTICS.STAGING.stg_eval_results union all select 'stg_query_history', count(*) from NL2SQL_ANALYTICS.STAGING.stg_query_history

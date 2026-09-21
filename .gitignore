@@ -41,3 +41,9 @@ dev_20240627/
 # (~/.snowflake/), but never let a copy land in a commit.
 *.p8
 *.pub
+
+# dbt build artifacts. Regenerated on every `dbt run`/`dbt build`; the
+# compiled SQL under target/ is derived from models/, and logs/ is per-run
+# output. Neither is source.
+dbt_project/target/
+dbt_project/logs/
