@@ -1,0 +1,42 @@
+# dbt project for the Snowflake analytics layer built on NL2SQL_ANALYTICS.RAW.
+#
+# The directory is dbt_project/ rather than dbt/ deliberately: `dbt` is the
+# installed package's own import name, and a top-level dbt/ here would sit
+# ahead of site-packages on sys.path for anything run from the repo root.
+# (The same collision already bit snowflake/ -> snowflake_sql/ in this repo.)
+
+name: 'nl2sql_analytics'
+version: '1.0.0'
+config-version: 2
+
+# Must match the top-level key in ~/.dbt/profiles.yml. That file holds
+# connection credentials and is deliberately NOT in this repo -- same reasoning
+# as the RSA private key. See dbt_project/README or the setup output.
+profile: 'nl2sql_analytics'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  nl2sql_analytics:
+    # Staging and intermediate are views: they are thin transformations over
+    # data that already lives in Snowflake, so materialising them would pay
+    # storage and refresh costs to duplicate rows for no query-time gain.
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    # Marts are tables: these are the aggregates dashboards hit repeatedly,
+    # where paying compute once at build time beats recomputing per query.
+    marts:
+      +materialized: table
+      +schema: marts

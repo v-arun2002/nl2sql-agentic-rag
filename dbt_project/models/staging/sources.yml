@@ -1,0 +1,45 @@
+version: 2
+
+sources:
+  # The tables written by snowflake_sql/schema.sql, loaded by
+  # eval/load_to_snowflake.py (EVAL_RUNS, EVAL_RESULTS) and by the MCP server's
+  # QUERY_HISTORY logging. Declared as a source rather than referenced directly
+  # so lineage starts here and the physical location is defined in one place.
+  - name: raw
+    database: NL2SQL_ANALYTICS
+    schema: RAW
+    description: >
+      Raw benchmark and telemetry tables, loaded as-is with no transformation.
+      Nothing downstream should select from these directly -- go through the
+      stg_ models, which own the type casting.
+
+    tables:
+      - name: eval_runs
+        description: One row per benchmark run; the configuration it ran under.
+        columns:
+          - name: run_id
+            description: uuid4 generated at load time. Primary key.
+          - name: source_file_hash
+            description: >
+              SHA-256 of the results CSV. The loader refuses to insert a run
+              whose hash already exists, so this is effectively unique.
+
+      - name: eval_results
+        description: One row per question in a run; joins to eval_runs on run_id.
+        columns:
+          - name: result_id
+            description: Snowflake AUTOINCREMENT. Monotonic but NOT contiguous.
+          - name: run_id
+            description: Foreign key to eval_runs.
+
+      - name: query_history
+        description: >
+          One row per agent invocation through the MCP server. Populated live
+          rather than batch-loaded, so it has no run_id and no link to eval_runs.
+        columns:
+          - name: invoked_at
+            description: >
+              Filled by Snowflake's DEFAULT CURRENT_TIMESTAMP(), not the client
+              clock -- so it is in the Snowflake session's timezone.
+          - name: source
+            description: Entry point that logged the row. Currently only 'mcp'.

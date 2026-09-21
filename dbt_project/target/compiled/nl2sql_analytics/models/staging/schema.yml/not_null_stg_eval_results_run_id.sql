@@ -1,0 +1,11 @@
+
+    
+    
+
+
+
+select run_id
+from NL2SQL_ANALYTICS.STAGING.stg_eval_results
+where run_id is null
+
+

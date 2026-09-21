@@ -1,0 +1,69 @@
+version: 2
+
+models:
+  - name: stg_eval_runs
+    description: Thin typed pass-through over RAW.EVAL_RUNS. One row per benchmark run.
+    columns:
+      - name: run_id
+        description: uuid4 assigned at load time.
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_eval_results
+    description: Thin typed pass-through over RAW.EVAL_RESULTS. One row per question.
+    columns:
+      - name: result_id
+        description: Snowflake AUTOINCREMENT. Monotonic but not contiguous.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: run_id
+        description: >
+          Foreign key to stg_eval_runs. Snowflake DECLARES this FK in
+          snowflake_sql/schema.sql but does not ENFORCE it -- the constraint is
+          metadata only. This test is therefore the sole thing standing between
+          an orphaned result row and a silently wrong accuracy number: an
+          orphan would be dropped by the inner join in
+          int_eval_results_enriched and simply vanish from every mart.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_eval_runs')
+                field: run_id
+
+      - name: difficulty
+        description: >
+          BIRD-SQL difficulty band, passed through from dev.json. The column is
+          a bare VARCHAR(20) with no CHECK constraint (and Snowflake would not
+          enforce one anyway), so nothing but this test stops a typo or a
+          renamed band from silently creating a fourth group in
+          mart_accuracy_by_difficulty -- which would look like a real result
+          rather than a data error.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['simple', 'moderate', 'challenging']
+
+  - name: stg_query_history
+    description: Thin typed pass-through over RAW.QUERY_HISTORY. One row per live MCP invocation.
+    columns:
+      - name: history_id
+        data_tests:
+          - unique
+          - not_null
+
+      - name: source
+        description: >
+          Entry point that logged the row. Only 'mcp' is written today; 'api'
+          and 'streamlit_ui' are accepted in advance because logging those two
+          entry points is planned and was explicitly deferred when QUERY_HISTORY
+          logging was added to the MCP server. Listing them now means adding
+          that logging does not also require editing this test -- but a value
+          outside the three still fails, which is the point.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['api', 'mcp', 'streamlit_ui']
