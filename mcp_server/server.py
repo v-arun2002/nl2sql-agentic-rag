@@ -45,11 +45,15 @@ See mcp_server/README.md for client configuration.
 from __future__ import annotations
 
 import os
+import sys
+import threading
 from typing import Annotated, Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field, ValidationError
+
+from src.db.snowflake_connection import get_snowflake_connection
 
 # The server name is part of the MCP handshake. Hosts display it and use it to
 # namespace tools, so it should be stable and unique across the servers a user
@@ -99,6 +103,78 @@ DATABASES: dict[str, str] = {
         "their constituent atoms and the bonds between them."
     ),
 }
+
+
+# --- QUERY_HISTORY telemetry -------------------------------------------------
+#
+# One Snowflake connection for the life of the process, created on first use.
+# Establishing a session costs roughly 1-2 seconds; this tool can be called
+# many times in one MCP session, and the process stays alive between calls, so
+# reconnecting per call would add that cost to every query for nothing.
+#
+# Lazy rather than at import: a client that only ever calls
+# nl2sql_list_databases, or that runs with no Snowflake credentials at all,
+# should not pay for -- or fail on -- a connection it never uses.
+_snowflake_conn = None
+_snowflake_lock = threading.Lock()
+
+
+def _get_logging_connection():
+    """
+    Return the process-wide Snowflake connection, opening it if needed.
+
+    The lock guards creation only. FastMCP dispatches sync tools onto a thread
+    pool, so two concurrent calls could otherwise open two sessions and leak
+    one. Sharing a single connection across threads is the connector's
+    supported pattern as long as each thread uses its own cursor, which the
+    caller below does.
+
+    A connection that has been closed or expired server-side is replaced
+    rather than reused -- a long-idle MCP session would otherwise start
+    failing every log write after the first timeout.
+    """
+    global _snowflake_conn
+    with _snowflake_lock:
+        if _snowflake_conn is None or _snowflake_conn.is_closed():
+            _snowflake_conn = get_snowflake_connection()
+        return _snowflake_conn
+
+
+def _log_query_history(db_id: str, question: str, sql: str | None, success: bool, retries: int) -> None:
+    """
+    Record one invocation in QUERY_HISTORY. Never raises.
+
+    Telemetry must not be able to break the thing it observes. This tool's job
+    is answering the question; if Snowflake is unreachable, credentials are
+    missing, or the insert deadlocks, the caller should still get their SQL
+    and rows. So every failure here is swallowed after being reported.
+
+    Reported on stderr specifically: this server speaks JSON-RPC over stdout
+    under the default stdio transport, and a stray print() there would corrupt
+    the protocol stream mid-session.
+
+    invoked_at is left to the column's DEFAULT CURRENT_TIMESTAMP() rather than
+    bound from this process, so the recorded time comes from one clock
+    (Snowflake's) no matter which machine the MCP client runs on.
+    """
+    try:
+        conn = _get_logging_connection()
+        with conn.cursor() as cur:
+            # NOTE: "source" below is deliberately unquoted -- the DDL created this
+            # column unquoted, so Snowflake folds it to SOURCE and this matches.
+            # If this column is ever recreated as a quoted "source" (lowercase),
+            # this INSERT breaks with "invalid identifier". Not fragile today; would
+            # be fragile the day someone "cleans up" the DDL without knowing this.
+            cur.execute(
+                """
+                INSERT INTO QUERY_HISTORY (db_id, question, sql_generated, success, retries, source)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (db_id, question, sql, success, retries, "mcp"),
+            )
+        conn.commit()
+    except Exception as exc:  # noqa: BLE001 -- deliberately total; see docstring
+        print(f"[nl2sql_mcp] QUERY_HISTORY logging failed ({type(exc).__name__}: {exc})", file=sys.stderr)
 
 
 class QueryRequest(BaseModel):
@@ -298,13 +374,21 @@ def nl2sql_query_database(
         # balancer error page sitting in front of the API.
         return QueryResult(success=False, error=f"NL2SQL API returned a non-JSON response: {exc}")
 
-    return QueryResult(
+    result = QueryResult(
         success=data.get("success", False),
         sql=data.get("sql"),
         result=data.get("result"),
         retries=data.get("retries", 0),
         error=None if data.get("success") else "The agent could not produce SQL that executed successfully.",
     )
+
+    # Only reached when the API actually answered. The transport failures above
+    # return early and are not logged: they say something about this proxy's
+    # connectivity, not about a query the agent ran, and QUERY_HISTORY is a
+    # record of agent invocations.
+    _log_query_history(db_id, question, result.sql, result.success, result.retries)
+
+    return result
 
 
 @mcp.tool(

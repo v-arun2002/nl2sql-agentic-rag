@@ -36,3 +36,8 @@ terraform/.terraform.lock.hcl
 k8s/01-secret.yaml
 dev_20240627/
 .DS_Store
+
+# Snowflake key-pair auth material. The keys live outside the repo by default
+# (~/.snowflake/), but never let a copy land in a commit.
+*.p8
+*.pub

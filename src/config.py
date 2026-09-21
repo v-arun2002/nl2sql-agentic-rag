@@ -42,5 +42,22 @@ class Settings:
     classifier_provider: str = os.getenv("CLASSIFIER_PROVIDER", "groq")
     classifier_model: str = os.getenv("CLASSIFIER_MODEL", "llama-3.1-8b-instant")
 
+    # Snowflake, via key-pair auth (see src/db/snowflake_connection.py).
+    #
+    # snowflake_account has no default on purpose: an account identifier is
+    # installation-specific and cannot be guessed, so a missing value should
+    # fail loudly at connect time rather than silently point somewhere wrong.
+    # Every other field defaults to the names this project provisions.
+    #
+    # The private key path keeps its literal "~" -- expansion happens at load
+    # time in snowflake_connection.py, so an env-supplied "~" works too.
+    snowflake_account: str = os.getenv("SNOWFLAKE_ACCOUNT", "")
+    snowflake_user: str = os.getenv("SNOWFLAKE_USER", "NL2SQL_SERVICE_USER")
+    snowflake_private_key_path: str = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH", "~/.snowflake/rsa_key.p8")
+    snowflake_warehouse: str = os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH")
+    snowflake_database: str = os.getenv("SNOWFLAKE_DATABASE", "NL2SQL_ANALYTICS")
+    snowflake_schema: str = os.getenv("SNOWFLAKE_SCHEMA", "RAW")
+    snowflake_role: str = os.getenv("SNOWFLAKE_ROLE", "NL2SQL_APP_ROLE")
+
 
 settings = Settings()

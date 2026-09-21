@@ -17,6 +17,7 @@ number meaningless.
 """
 
 import csv
+import datetime
 import json
 import os
 import sqlite3
@@ -28,6 +29,7 @@ from src.config import settings
 from src.graph import build_graph
 
 RESULTS_PATH = "eval/results.csv"
+METADATA_PATH = "eval/run_metadata.json"
 
 
 def load_dev_set(path: str) -> list:
@@ -68,6 +70,41 @@ def write_results(results: list) -> None:
         writer.writerows(results)
 
 
+def write_run_metadata(total_questions: int) -> None:
+    """
+    Record which configuration produced this run, alongside results.csv.
+
+    Written at the START of a run, not the end, so an interrupted run still
+    leaves a record of what it was. results.csv on its own says what happened
+    but not under which models -- and the answer stops being recoverable the
+    moment .env changes, which is exactly when it matters. The two historical
+    CSVs in this directory predate this file and are why it exists: their
+    model configuration is no longer knowable and loads to
+    "unknown (pre-tracking)".
+
+    Consumed by eval/load_to_snowflake.py, which reads it to populate
+    EVAL_RUNS without anyone having to remember or retype the config.
+
+    The timestamp is timezone-aware (via astimezone()) rather than a naive
+    local time, so a run is still unambiguously orderable against runs from a
+    machine in another zone.
+    """
+    metadata = {
+        "run_timestamp": datetime.datetime.now().astimezone().isoformat(),
+        "planner_provider": settings.planner_provider,
+        "planner_model": settings.planner_model,
+        "generator_provider": settings.generator_provider,
+        "generator_model": settings.generator_model,
+        "classifier_provider": settings.classifier_provider,
+        "classifier_model": settings.classifier_model,
+        "include_evidence_in_prompts": settings.include_evidence_in_prompts,
+        "total_questions": total_questions,
+    }
+    with open(METADATA_PATH, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+    print(f"Run metadata written to {METADATA_PATH}")
+
+
 def print_summary(results: list, total_elapsed: float, questions_run_now: int) -> None:
     if not results:
         return
@@ -98,6 +135,10 @@ def run_benchmark(limit: int | None = None) -> None:
         print(f"Running a LIMITED slice: {limit} of the full set.\n")
     else:
         print(f"Running the FULL set: {len(examples)} examples.\n")
+
+    # Both the model settings and the question count are known now, before any
+    # work happens -- so the config record survives even if the run dies.
+    write_run_metadata(len(examples))
 
     # Resume support: if results.csv already holds rows, skip the questions
     # they cover and append from there. Lets a long run survive interruption
