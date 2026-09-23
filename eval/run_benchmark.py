@@ -28,8 +28,15 @@ from src.agents.state import initial_state
 from src.config import settings
 from src.graph import build_graph
 
-RESULTS_PATH = "eval/results.csv"
-METADATA_PATH = "eval/run_metadata.json"
+# Env-overridable so a scheduled run can write to its own timestamped files
+# instead of clobbering -- and then RESUMING FROM -- the local eval/results.csv.
+# That resume behaviour is the real hazard: a second scheduled run pointed at an
+# existing results.csv would skip every question it already contains and emit a
+# byte-identical file, which the Snowflake loader would then reject as a
+# duplicate hash. Defaults are unchanged, so interactive use behaves exactly as
+# before.
+RESULTS_PATH = os.getenv("BENCHMARK_RESULTS_PATH", "eval/results.csv")
+METADATA_PATH = os.getenv("BENCHMARK_METADATA_PATH", "eval/run_metadata.json")
 
 
 def load_dev_set(path: str) -> list:
