@@ -3,7 +3,9 @@
 > **Ask a database a question in plain English. Get correct SQL back.**
 > Five specialised agents, a self-correcting loop that routes each failure to
 > whichever agent caused it, and a measured **44.20%** on 500 BIRD-SQL questions
-> — without the hints most published numbers use.
+> — without the hints most published numbers use. The agent is wrapped as an
+> MCP server other AI systems can call, and its eval history flows into a
+> Snowflake / dbt / Airflow pipeline that regression-tests it weekly.
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![LangGraph](https://img.shields.io/badge/LangGraph-state%20machine-orange)
@@ -175,6 +177,11 @@ real sample values alongside column names eliminated this category entirely.
 | Backend | FastAPI | exposes the graph as `POST /query` |
 | Demo UI | Streamlit | generated SQL, results and the full agent trace, against the bundled BIRD databases **or your own SQLite upload** (50MB cap, session-scoped with automatic eviction, queried read-only) |
 | Ops | Docker, docker-compose, GitHub Actions | containerised, CI-gated regression tests |
+| Agent interface | MCP server | exposes the NL2SQL agent as a tool other AI systems can call, as a thin proxy over the existing FastAPI service rather than a second in-process copy of the graph |
+| Warehouse | Snowflake | eval runs, per-question results and live query history; key-pair auth on a least-privilege service role |
+| Transformation | dbt | staging → intermediate → marts, 11 tests including a `relationships` test enforcing the FK Snowflake declares but never enforces |
+| BI | Power BI (DirectQuery) | accuracy by database, by difficulty, and over time, read live from the mart layer (the `.pbix` is kept outside the repo — a binary file that embeds connection config) |
+| Orchestration | Airflow 3.3 (Docker Compose) | weekly regression run → load → dbt build → statistical drift check |
 
 **Provider routing is per-role, not global.** The classifier picks one of four
 category labels — a large reasoning model is waste there, so it runs on Groq's
@@ -185,6 +192,62 @@ on OpenAI's `gpt-5-mini`. Configured entirely through environment variables
 That abstraction paid for itself: Gemini's free tier turned out to allow **20
 requests per day** for `gemini-3.6-flash`, making it unusable for a 500-question
 benchmark. Moving the planner to another provider took one line in `.env`.
+
+---
+
+## The eval pipeline
+
+`eval/results.csv` is one file, overwritten on every run. That is fine for a
+single experiment and useless for regression testing: it cannot answer *did
+accuracy change, and when* — the only question worth asking about a system whose
+outputs are non-deterministic. Three of the four agent steps call an LLM, so the
+same question can yield different SQL on consecutive runs, and a fixed file with
+no history cannot tell that noise apart from a real regression.
+
+So runs land in Snowflake instead. `EVAL_RUNS` holds one row per run with the
+configuration that produced it, `EVAL_RESULTS` one row per question, and
+`QUERY_HISTORY` logs live invocations arriving through the MCP server. dbt shapes
+those into `STAGING` → `INTERMEDIATE` → `MARTS`; Power BI reads the marts over
+DirectQuery.
+
+Airflow runs the whole thing weekly — not daily, because each run is 150
+questions of real, paid LLM calls:
+
+1. **`run_benchmark`** — the 150-question slice, into a *timestamped* CSV.
+   Timestamped because the harness **resumes** from whatever its results file
+   already holds: pointed at last week's file it would skip every question, do
+   nothing, and emit byte-identical output.
+2. **`load_to_snowflake`** — mints a `run_id`, inserts the parent run, bulk
+   loads rows via `write_pandas`. It refuses a CSV whose SHA-256 already exists
+   and exits non-zero. There is deliberately no skip flag: on a schedule,
+   identical bytes mean the benchmark never actually ran, which is the most
+   valuable signal the pipeline produces.
+3. **`dbt_build`** — `+mart_accuracy_over_time` only, not a full rebuild. That
+   mart is a table rather than a view, so a freshly loaded run stays invisible
+   until it is rebuilt.
+4. **`drift_check`** — below.
+
+### The drift check, and the confound it surfaced
+
+It compares `db_id_set_hash` **before** it compares accuracy. If two runs cover
+different database sets it fails saying so, rather than reporting a delta that
+means nothing. Only when coverage matches does it run McNemar's exact test on
+the paired per-question outcomes — imported from `scripts/compare_ablation.py`,
+the same implementation behind the +8.67pp result above, not a second copy free
+to drift from it.
+
+The gate earned its place immediately, on data already in the warehouse.
+`baseline` spans **11 databases**; `with_evidence` spans **4**
+(`debit_card_specializing`, `european_football_2`, `student_club`,
+`thrombosis_prediction`) — and all four were already above-average performers
+under `baseline`. So the raw **0.4420 → 0.5267** jump visible in
+`mart_accuracy_over_time` is **not** the controlled +8.67pp figure documented
+above. It conflates *evidence helps* with *this run skipped the hard databases*.
+
+`distinct_db_count` alone cannot catch that: two disjoint four-database runs
+both report 4. `db_id_set_hash` is `MD5` over the sorted distinct `db_id`s, so it
+fingerprints the set rather than its size — verified against a constructed
+disjoint four-database set, which produced the same count and a different hash.
 
 ---
 
@@ -334,6 +397,39 @@ deliberately withholds.
 for a "peak month," the system returned `'201307'` where the reference expects
 `'07'`. Same logic, same underlying answer, scored wrong. A meaningful share of
 the 279 failures are shape mismatches rather than reasoning errors.
+
+**Telemetry failures are swallowed on purpose.** The MCP server's
+`QUERY_HISTORY` insert sits inside a bare `except` that reports to stderr and
+returns normally — a broken logging write must never become a broken query
+response. Verified by making the insert fail server-side: both calls returned
+their rows, both logged the failure, neither raised. The cost is that telemetry
+can fail invisibly; a real deployment would alert on it rather than print to
+stderr.
+
+**Only statement-level Snowflake failures are tested.** A `ProgrammingError`
+leaves the cached connection usable, and a second call was confirmed to reuse it
+and reach the server normally. Transport-level failures — a socket drop or an
+expired session mid-`INSERT` — take a different path (`is_closed()`, then
+reconnect) that has never been exercised under real conditions.
+
+**Two timestamp conventions coexist.** `EVAL_RUNS.run_timestamp` is normalised
+to UTC before insert, because the column is `TIMESTAMP_NTZ` and mixed offsets
+would otherwise be incomparable. `QUERY_HISTORY.invoked_at` is filled by
+Snowflake's `DEFAULT CURRENT_TIMESTAMP()` and lands in the session timezone.
+Harmless until something joins the two on time, at which point it silently
+shifts by hours.
+
+**The Airflow image carries the entire agent stack**, which pushes a bare
+`import airflow` to ~7s and `airflow jobs check` to ~11.5s. The stock 10s
+healthcheck timeouts were raised to 60s rather than trimming the image — every
+service reported `unhealthy` while its job was demonstrably alive. The same
+import tax is paid by every task the DAG runs.
+
+**None of this is production-grade, and it is not pretending to be.** There is
+no alerting on DAG failure — a failed weekly run is visible in the Airflow UI
+and nowhere else. Secrets live in `.env` files on the host rather than a secrets
+manager. It is a working data platform for a single operator, sized to
+demonstrate the pipeline end to end, not to run unattended.
 
 ### A negative result worth recording
 
@@ -555,11 +651,16 @@ src/
   demo_limits.py           per-session and global daily query caps
 eval/
   run_benchmark.py         benchmark harness (checkpointing + resume)
+  load_to_snowflake.py     standalone CSV -> Snowflake loader (Airflow calls it)
   metrics.py               execution accuracy (BIRD's EX metric)
   results_500_baseline.csv per-question results and failure taxonomy
   results_150_with_evidence.csv  evidence-ablation arm (see Results)
 data/build_schema_index.py schema introspection + sample-value extraction
 api/ ui/                   FastAPI backend, Streamlit frontend
+mcp_server/server.py       MCP tools over the FastAPI service (thin HTTP proxy)
+snowflake_sql/schema.sql   EVAL_RUNS, EVAL_RESULTS, QUERY_HISTORY DDL
+dbt_project/               staging -> intermediate -> marts, sources, tests
+airflow/                   Compose stack, custom image, weekly eval DAG
 k8s/ terraform/            Kubernetes manifests, AWS Lambda IaC
 scripts/                   diagnostic tools used during development
 ```
