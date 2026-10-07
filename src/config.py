@@ -46,6 +46,15 @@ class Settings:
     classifier_provider: str = os.getenv("CLASSIFIER_PROVIDER", "groq")
     classifier_model: str = os.getenv("CLASSIFIER_MODEL", "openai/gpt-oss-20b")
 
+    # Summarises a result set for the MCP explain tool. Not part of the
+    # five-agent pipeline -- nothing benchmarked runs through it. Defaults to
+    # the GENERATOR's model, not the classifier's: it was first tied to the
+    # classifier as the cheaper option, and broke when Groq retired
+    # llama-3.1-8b-instant. Following the generator means it tracks whichever
+    # model the pipeline actually depends on working.
+    explainer_provider: str = os.getenv("EXPLAINER_PROVIDER", generator_provider)
+    explainer_model: str = os.getenv("EXPLAINER_MODEL", generator_model)
+
     # Snowflake, via key-pair auth (see src/db/snowflake_connection.py).
     #
     # snowflake_account has no default on purpose: an account identifier is

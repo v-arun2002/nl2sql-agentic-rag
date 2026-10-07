@@ -21,7 +21,15 @@ casted as (
         cast(sql_generated as varchar)       as sql_generated,
         cast(success       as boolean)       as success,
         cast(retries       as number)        as retries,
-        cast(source        as varchar(20))   as source
+        cast(source        as varchar(20))   as source,
+
+        -- Per-tool audit fields, added with the multi-tool MCP server. NULL on
+        -- rows logged before they existed, when the server had one tool.
+        cast(mcp_tool       as varchar(64))  as mcp_tool,
+        cast(client_name    as varchar(200)) as client_name,
+        cast(client_version as varchar(64))  as client_version,
+        cast(arguments      as variant)      as arguments,
+        cast(error_message  as varchar)      as error_message
 
     from source
 

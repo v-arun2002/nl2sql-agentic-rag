@@ -41,3 +41,29 @@ CREATE TABLE IF NOT EXISTS QUERY_HISTORY (
     retries               NUMBER,
     source                 VARCHAR(20)
 );
+
+-- ---------------------------------------------------------------------------
+-- Migrations. The CREATE statements above are the original DDL and are left
+-- verbatim; columns added since are applied here with IF NOT EXISTS, so this
+-- file is safe to re-run against an existing schema and complete on a fresh
+-- one.
+-- ---------------------------------------------------------------------------
+
+-- Provider per role, and a content hash so eval/load_to_snowflake.py can
+-- refuse to load the same CSV twice. Already live; recorded here so a fresh
+-- environment built from this file does not break the loader.
+ALTER TABLE EVAL_RUNS ADD COLUMN IF NOT EXISTS
+    planner_provider     VARCHAR(50),
+    generator_provider   VARCHAR(50),
+    classifier_provider  VARCHAR(50),
+    source_file_hash     VARCHAR(64);
+
+-- Audit trail for the multi-tool MCP server: which tool, which client, with
+-- what arguments, and why it was refused if it was. Rows logged before these
+-- columns existed have them NULL.
+ALTER TABLE QUERY_HISTORY ADD COLUMN IF NOT EXISTS
+    mcp_tool        VARCHAR(64),
+    client_name     VARCHAR(200),
+    client_version  VARCHAR(64),
+    arguments       VARIANT,
+    error_message   VARCHAR;

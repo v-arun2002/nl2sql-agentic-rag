@@ -48,7 +48,10 @@ models:
                 values: ['simple', 'moderate', 'challenging']
 
   - name: stg_query_history
-    description: Thin typed pass-through over RAW.QUERY_HISTORY. One row per live MCP invocation.
+    description: >
+      Thin typed pass-through over RAW.QUERY_HISTORY. One row per MCP tool
+      call -- including refused calls, which are the events an audit trail
+      exists to keep.
     columns:
       - name: history_id
         data_tests:
@@ -67,3 +70,22 @@ models:
           - accepted_values:
               arguments:
                 values: ['api', 'mcp', 'streamlit_ui']
+
+      - name: mcp_tool
+        description: >
+          Which MCP tool was called. NULL on rows logged before the server
+          was split into granular tools. A name outside this list fails the
+          build -- a renamed or newly added tool has to be declared here, so
+          the audit trail cannot silently start recording an undocumented
+          tool surface.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - nl2sql_list_databases
+                  - nl2sql_get_capabilities
+                  - nl2sql_generate_sql
+                  - nl2sql_validate_sql
+                  - nl2sql_execute_query
+                  - nl2sql_explain_result
+                  - nl2sql_query_database

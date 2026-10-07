@@ -3,9 +3,9 @@
 > **Ask a database a question in plain English. Get correct SQL back.**
 > Five specialised agents, a self-correcting loop that routes each failure to
 > whichever agent caused it, and a measured **44.20%** on 500 BIRD-SQL questions
-> — without the hints most published numbers use. The agent is wrapped as an
-> MCP server other AI systems can call, and its eval history flows into a
-> Snowflake / dbt / Airflow pipeline that regression-tests it weekly.
+> — without the hints most published numbers use. It exposes a multi-tool MCP
+> server with read-only enforcement at the tool boundary, and its eval history
+> flows into a Snowflake / dbt / Airflow pipeline that regression-tests it weekly.
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![LangGraph](https://img.shields.io/badge/LangGraph-state%20machine-orange)
@@ -195,7 +195,7 @@ real sample values alongside column names eliminated this category entirely.
 | Backend | FastAPI | exposes the graph as `POST /query` |
 | Demo UI | Streamlit | generated SQL, results and the full agent trace, against the bundled BIRD databases **or your own SQLite upload** (50MB cap, session-scoped with automatic eviction, queried read-only) |
 | Ops | Docker, docker-compose, GitHub Actions | containerised, CI-gated regression tests |
-| Agent interface | MCP server | exposes the NL2SQL agent as a tool other AI systems can call, as a thin proxy over the existing FastAPI service rather than a second in-process copy of the graph |
+| Agent interface | Multi-tool MCP server | seven tools — generate, validate, execute and explain as separately callable steps, plus discovery and a capability manifest — with read-only enforcement at the tool boundary; a thin proxy over the FastAPI service, not a second in-process copy of the graph |
 | Warehouse | Snowflake | eval runs, per-question results and live query history; key-pair auth on a least-privilege service role |
 | Transformation | dbt | staging → intermediate → marts, 11 tests including a `relationships` test enforcing the FK Snowflake declares but never enforces |
 | BI | Power BI (DirectQuery) | accuracy by database, by difficulty, and over time, read live from the mart layer (the `.pbix` is kept outside the repo — a binary file that embeds connection config) |
@@ -213,6 +213,64 @@ benchmark. Moving the planner to another provider took one line in `.env`.
 
 ---
 
+## The MCP server
+
+The agent is callable by other AI systems as a **multi-tool MCP server with
+read-only enforcement at the tool boundary** (`mcp_server/`). Rather than one
+opaque question-in, rows-out tool, the pipeline is exposed as steps a calling
+agent can stop between — to read the SQL, edit it, decline to run it, or run
+its own:
+
+| Tool | Does |
+|---|---|
+| `nl2sql_generate_sql` | question → corrected SQL, no rows |
+| `nl2sql_validate_sql` | SQL → read-only verdict, without running it |
+| `nl2sql_execute_query` | SQL → bounded rows |
+| `nl2sql_explain_result` | rows → two to four plain sentences |
+| `nl2sql_get_capabilities` | every tool's schema, what it enforces, what it refuses |
+| `nl2sql_list_databases` | discovery |
+| `nl2sql_query_database` | the original all-in-one tool, kept for existing clients |
+
+**Generation is not cut at the generator.** Self-correction is driven by
+execution errors, so `generate_sql` still runs the full graph — trial
+executions included — and returns the *corrected* SQL. Stopping before the
+executor would return first drafts and quietly score below 44.20%. It makes
+the identical `graph.invoke` call the benchmark harness makes.
+
+**Read-only is enforced on every call, three layers deep.** `validate_sql` and
+`execute_query` accept SQL from any caller, so both run a compile-time SQLite
+authorizer that permits only `READ`, `SELECT`, `FUNCTION` and `RECURSIVE`,
+on top of the existing `PRAGMA query_only` and `mode=ro` connection. SQLite's
+own parser does the checking, so a `DELETE` buried in a CTE is still refused —
+by name, before a row is touched. `execute_query` re-runs the gate itself
+rather than trusting that `validate_sql` came first: the tools are separately
+callable, so "validated" is the caller's claim, not a fact. Tested through a
+real MCP client against `DROP`, `DELETE`, a CTE-wrapped `DELETE`, stacked
+statements, `ATTACH`, `PRAGMA` and `load_extension()` — all refused, table row
+count identical before and after.
+
+**The gate does not touch accuracy, and that was measured, not assumed.** All
+1,132 distinct statements in both benchmark CSVs — every predicted and every
+gold query — were run through the pipeline's executor and through the gate
+side by side: **0 false rejections, 0 row mismatches**, identical rows on all
+1,128 that finished inside 60s. The one real cost is the execution timeout:
+11 of those statements (~1%) take longer than its 10s default, which the
+pipeline's own executor would run and `execute_query` aborts. That bound is
+deliberate — a cartesian join should not hang a tool call — and
+`SQL_TIMEOUT_SECONDS` moves it.
+
+The **capability manifest** cannot drift from the code: schemas come from the
+live tool registry, limits from the API that enforces them, and a tool
+registered without a safety declaration shows up as undeclared rather than
+silently missing. Every call — refusals included — lands in `QUERY_HISTORY`.
+
+Asked "Which constructor won the most races?", `explain_result` answered
+*"…constructorId with value 6. That is an identifier, not a constructor name,
+so the query does not directly state which constructor won…"* — surfacing the
+wrong-but-valid failure documented below instead of guessing "Ferrari".
+
+---
+
 ## The eval pipeline
 
 `eval/results.csv` is one file, overwritten on every run. That is fine for a
@@ -224,7 +282,8 @@ no history cannot tell that noise apart from a real regression.
 
 So runs land in Snowflake instead. `EVAL_RUNS` holds one row per run with the
 configuration that produced it, `EVAL_RESULTS` one row per question, and
-`QUERY_HISTORY` logs live invocations arriving through the MCP server. dbt shapes
+`QUERY_HISTORY` logs every MCP tool call — tool, declared client, arguments, and
+refusal reason. dbt shapes
 those into `STAGING` → `INTERMEDIATE` → `MARTS`; Power BI reads the marts over
 DirectQuery.
 
@@ -455,6 +514,10 @@ silently. One retry with reasoning headroom fixed it (`9a33221`). The
 correction loop works again; how well it works under this classifier is exactly
 what the pending fresh baseline would measure.
 
+**MCP client identity is self-declared.** `QUERY_HISTORY.client_name` is what
+the client announced in its `initialize` handshake. It identifies which
+integration made a call, not who the human behind it is.
+
 **None of this is production-grade, and it is not pretending to be.** There is
 no alerting on DAG failure — a failed weekly run is visible in the Airflow UI
 and nowhere else. Secrets live in `.env` files on the host rather than a secrets
@@ -677,6 +740,8 @@ src/
   retrieval/               Chroma vector store + optional Redis cache
   db/executor.py           SQLite execution with empty-query guard
   db/connection.py         read-only connections (mode=ro + query_only)
+  db/sql_guard.py          tool-boundary gate: compile-time authorizer, row cap, timeout
+  explain.py               result summaries for the MCP explain tool
   uploads.py               demo SQLite uploads: validation, TTL/cap eviction
   demo_limits.py           per-session and global daily query caps
 eval/
@@ -687,7 +752,7 @@ eval/
   results_150_with_evidence.csv  evidence-ablation arm (see Results)
 data/build_schema_index.py schema introspection + sample-value extraction
 api/ ui/                   FastAPI backend, Streamlit frontend
-mcp_server/server.py       MCP tools over the FastAPI service (thin HTTP proxy)
+mcp_server/server.py       seven MCP tools + capability manifest (thin HTTP proxy)
 snowflake_sql/schema.sql   EVAL_RUNS, EVAL_RESULTS, QUERY_HISTORY DDL
 dbt_project/               staging -> intermediate -> marts, sources, tests
 airflow/                   Compose stack, custom image, weekly eval DAG
