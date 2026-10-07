@@ -183,7 +183,16 @@ class SchemaVectorStore:
             return False
 
     def retrieve_relevant_tables(self, db_id: str, question: str, top_k: int = 6) -> List[Dict[str, Any]]:
-        collection = self.client.get_or_create_collection(
+        # get_collection, NOT get_or_create_collection: retrieval is a read
+        # and must not write. With get_or_create, an unindexed db_id silently
+        # created an empty collection in the index directory and returned no
+        # tables -- the pipeline then ran the planner and generator against an
+        # empty schema, and every unknown name left a junk collection behind.
+        # A missing collection now raises, which schema_retriever_node turns
+        # into a retrieval failure that ends the question. index_schema()
+        # above keeps get_or_create: building the index is the one place
+        # creating a collection is the intent.
+        collection = self.client.get_collection(
             name=self._collection_name(db_id),
             embedding_function=self.embedding_fn,
         )

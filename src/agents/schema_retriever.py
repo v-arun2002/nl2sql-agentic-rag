@@ -39,9 +39,37 @@ def schema_retriever_node(state: AgentState) -> dict:
     cache_hit = relevant_tables is not None
 
     if not cache_hit:
-        relevant_tables = store_for(state["db_id"]).retrieve_relevant_tables(
-            state["db_id"], state["question"], top_k=top_k
-        )
+        # A failed retrieval must never fail the PROCESS. Unguarded, a Chroma
+        # error -- the 6 historical crashes were all "Error creating hnsw
+        # segment reader: Nothing found on disk" -- propagated out of
+        # graph.invoke: a fatal_error row in the benchmark, a 500 in the API.
+        #
+        # The fallback ENDS the question rather than continuing with an empty
+        # schema. Continuing would still spend planner and generator calls,
+        # and could occasionally guess correct SQL with no schema at all --
+        # turning a question that crashed into one scored correct, which
+        # would move results rather than just stop the crash. Ending
+        # guarantees the question scores exactly as a crash did: incorrect.
+        try:
+            relevant_tables = store_for(state["db_id"]).retrieve_relevant_tables(
+                state["db_id"], state["question"], top_k=top_k
+            )
+        except Exception as e:  # noqa: BLE001 -- deliberately total; see above
+            failure = f"{type(e).__name__}: {e}"[:300]
+            return {
+                "retrieval_failed": True,
+                "success": False,
+                "execution_result": None,
+                "execution_error": f"Schema retrieval failed: {failure}",
+                "trace": state["trace"] + [
+                    {
+                        "node": "schema_retriever",
+                        "retry_count": state["retry_count"],
+                        "status": "failed",
+                        "retrieval_failure": failure,
+                    }
+                ],
+            }
         set_cached_retrieval(state["db_id"], state["question"], top_k, relevant_tables)
 
     schema_text = "\n\n".join(t["schema_text"] for t in relevant_tables if t.get("schema_text"))

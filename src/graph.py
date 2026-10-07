@@ -18,6 +18,9 @@ Builds the LangGraph state machine:
                                                  (loops back to executor,
                                                   bounded by max_retries)
 
+If schema retrieval itself fails (vector store unreadable), route_after_retrieval
+ends the question at once, before any LLM call -- see schema_retriever.py.
+
 The routing logic (route_after_classification) is the actual differentiator
 of this project: most NL2SQL correction loops just re-prompt with the raw
 error message. Routing to the specific agent responsible for that error
@@ -32,6 +35,14 @@ from src.agents.query_planner import query_planner_node
 from src.agents.sql_generator import sql_generator_node
 from src.agents.error_classifier import error_classifier_node
 from src.db.executor import executor_node
+
+
+def route_after_retrieval(state: AgentState) -> str:
+    # .get rather than [] so hand-built states (tests, older callers) without
+    # the key behave exactly as before: straight on to the planner.
+    if state.get("retrieval_failed"):
+        return "end"
+    return "query_planner"
 
 
 def route_after_execution(state: AgentState) -> str:
@@ -65,7 +76,14 @@ def build_graph():
     graph.add_node("classify_error", error_classifier_node)
 
     graph.set_entry_point("schema_retriever")
-    graph.add_edge("schema_retriever", "query_planner")
+    # Conditional rather than a plain edge only so a failed retrieval can end
+    # the question. On every successful retrieval it returns "query_planner"
+    # -- the same transition the plain edge made.
+    graph.add_conditional_edges(
+        "schema_retriever",
+        route_after_retrieval,
+        {"query_planner": "query_planner", "end": END},
+    )
     graph.add_edge("query_planner", "sql_generator")
     graph.add_edge("sql_generator", "executor")
 

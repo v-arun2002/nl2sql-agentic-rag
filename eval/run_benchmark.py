@@ -183,6 +183,14 @@ def run_benchmark(limit: int | None = None) -> None:
             final_state = graph.invoke(state)
             gold_result = get_gold_result(db_id, gold_sql)
             row_correct = execution_match(final_state.get("execution_result"), gold_result)
+            # A failed schema retrieval no longer raises -- the graph ends the
+            # question itself (see schema_retriever.py) -- so it would
+            # otherwise land in the CSV as an unexplained failure. Record its
+            # cause in the same column a crash used, so it stays findable.
+            # Scoring is untouched: row_correct is computed exactly as before,
+            # and is False here because execution_result is None.
+            if final_state.get("retrieval_failed"):
+                fatal_error = final_state.get("execution_error")
         except Exception as e:
             fatal_error = f"{type(e).__name__}: {e}"
             final_state = {"sql_query": None, "trace": [{"node": "benchmark", "fatal_error": fatal_error}], "retry_count": 0}

@@ -35,6 +35,11 @@ class AgentState(TypedDict):
     retry_count: int
     max_retries: int
 
+    # Set when schema retrieval itself fails (vector store unreadable, index
+    # segment missing). Routes the graph straight to END: without a schema
+    # there is nothing for the planner or generator to work from.
+    retrieval_failed: bool
+
     trace: List[dict]
     success: bool
     final_answer: Optional[str]
@@ -58,6 +63,7 @@ def initial_state(db_id: str, question: str, evidence: Optional[str] = None, max
         "error_class": None,
         "retry_count": 0,
         "max_retries": max_retries,
+        "retrieval_failed": False,
         "trace": [],
         "success": False,
         "final_answer": None,
