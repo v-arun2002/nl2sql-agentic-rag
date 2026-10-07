@@ -93,3 +93,13 @@ def test_rule_based_path_never_calls_the_llm(monkeypatch):
     out = error_classifier_node(_state(execution_error="no such column: wins"))
     assert out["error_class"] == "SCHEMA_ERROR"
     assert out["trace"][-1]["source"] == "rule_based"
+
+
+def test_quota_exhaustion_is_not_swallowed(monkeypatch):
+    # Every other failure falls back to UNKNOWN_ERROR. Exhausted credit must
+    # not: it invalidates the run, and absorbing it here would score the
+    # question as wrong and let the run continue recording more of them.
+    from src.llm_providers import QuotaExhaustedError
+    monkeypatch.setattr(error_classifier, "generate_text", _raise(QuotaExhaustedError("no credit")))
+    with pytest.raises(QuotaExhaustedError):
+        error_classifier_node(_state())

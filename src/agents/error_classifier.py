@@ -12,7 +12,7 @@ The classification decides WHERE the correction router sends the state next
 from typing import get_args
 
 from src.config import settings
-from src.llm_providers import generate_text
+from src.llm_providers import QuotaExhaustedError, generate_text
 from src.agents.state import AgentState, ErrorClass
 
 CLASSIFIER_SYSTEM_PROMPT = """You classify SQL execution failures into exactly \
@@ -72,6 +72,12 @@ def error_classifier_node(state: AgentState) -> dict:
                 max_output_tokens=20,
             )
             error_class = raw.strip()
+        except QuotaExhaustedError:
+            # The one exception NOT absorbed here. An out-of-credit account
+            # invalidates the whole run, not this question -- swallowing it
+            # would score the question as wrong and let the run carry on
+            # recording more of them. It propagates so run_benchmark.py stops.
+            raise
         except Exception as e:  # noqa: BLE001 -- deliberately total; see above
             error_class = "UNKNOWN_ERROR"
             source = "llm_failed"

@@ -27,6 +27,11 @@ from eval.metrics import execution_match
 from src.agents.state import initial_state
 from src.config import settings
 from src.graph import build_graph
+from src.llm_providers import is_quota_exhausted
+
+# Distinct from 1 (an ordinary crash) so a launcher can tell "out of credit,
+# resumable" apart from "something is broken".
+EXIT_QUOTA_EXHAUSTED = 3
 
 # Env-overridable so a scheduled run can write to its own timestamped files
 # instead of clobbering -- and then RESUMING FROM -- the local eval/results.csv.
@@ -192,6 +197,20 @@ def run_benchmark(limit: int | None = None) -> None:
             if final_state.get("retrieval_failed"):
                 fatal_error = final_state.get("execution_error")
         except Exception as e:
+            if is_quota_exhausted(e):
+                # Stop the RUN, not just this question. With no credit, every
+                # remaining question fails the same way, and recording each as
+                # a wrong answer would turn the rest of the CSV into a
+                # measurement of an empty account. Checkpoint what genuinely
+                # completed and exit non-zero -- this question is NOT recorded,
+                # so resuming after a top-up re-runs it from scratch.
+                write_results(results)
+                print(
+                    f"\nSTOPPED at question #{i + 1} (question_id {question_id}): provider account "
+                    f"has no credit.\n  {e}\n{len(results)} completed questions checkpointed to "
+                    f"{RESULTS_PATH}. Add credit, then re-run to resume from #{i + 1}."
+                )
+                raise SystemExit(EXIT_QUOTA_EXHAUSTED) from e
             fatal_error = f"{type(e).__name__}: {e}"
             final_state = {"sql_query": None, "trace": [{"node": "benchmark", "fatal_error": fatal_error}], "retry_count": 0}
             row_correct = False

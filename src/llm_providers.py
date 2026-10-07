@@ -28,18 +28,69 @@ from src.config import settings
 
 _gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
+
+# --- billing exhaustion ---------------------------------------------------------
+#
+# An exhausted account answers HTTP 429, the same status as a per-minute rate
+# limit, so both retry layers treated it as transient: the SDK made 3 attempts
+# per call, our backoff repeated that 5 times, and only then did the question
+# fail. Retrying cannot help -- no credit appears between attempts -- so on the
+# first night of a fresh baseline every question after the balance ran out
+# burned ~143s and was recorded as a wrong answer. This is not a model failure,
+# and scoring it as one silently corrupts a run.
+#
+# Detection is on OpenAI's billing codes, not on 429 alone: a genuine rate
+# limit ('rate_limit_exceeded') is still retried exactly as before.
+_QUOTA_MARKERS = ("insufficient_quota", "credit_balance_exhausted")
+
+
+class QuotaExhaustedError(RuntimeError):
+    """The provider account has no credit. Not retryable; the caller must stop."""
+
+
+def is_quota_exhausted(exc: BaseException) -> bool:
+    """True if `exc`, or anything in its cause chain, is billing exhaustion."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, QuotaExhaustedError):
+            return True
+        if any(m in str(exc) for m in _QUOTA_MARKERS):
+            return True
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+class _OpenAICompatible(OpenAI):
+    """OpenAI client that does not retry an out-of-credit 429.
+
+    _should_retry is the SDK's own retry decision, called with the failed
+    response. Every other case -- real rate limits, 408, 409, 5xx -- is left to
+    the SDK's default logic unchanged."""
+
+    def _should_retry(self, response) -> bool:
+        if response.status_code == 429:
+            try:
+                body = response.read().decode("utf-8", "replace")
+            except Exception:  # noqa: BLE001 -- unreadable body: fall back to default logic
+                body = ""
+            if any(m in body for m in _QUOTA_MARKERS):
+                return False
+        return super()._should_retry(response)
+
+
 # timeout + max_retries: without an explicit timeout, a request that opens but
 # never returns will block the entire benchmark indefinitely -- our backoff
 # layer only catches calls that FAIL, not ones that hang. 120s is generous for
 # a reasoning model; max_retries=2 lets the SDK absorb transient network blips
 # before our own backoff ever sees an error.
 _openai_client = (
-    OpenAI(api_key=settings.openai_api_key, timeout=120.0, max_retries=2)
+    _OpenAICompatible(api_key=settings.openai_api_key, timeout=120.0, max_retries=2)
     if settings.openai_api_key
     else None
 )
 _groq_client = (
-    OpenAI(
+    _OpenAICompatible(
         api_key=settings.groq_api_key,
         base_url="https://api.groq.com/openai/v1",
         timeout=120.0,
@@ -57,6 +108,8 @@ def _with_backoff(fn, max_attempts: int = 5, initial_delay: float = 2.0):
         try:
             return fn()
         except Exception as e:
+            if is_quota_exhausted(e):
+                raise QuotaExhaustedError(f"Provider account has no credit remaining: {e}") from e
             msg = str(e).lower()
             if "429" not in msg and "resource_exhausted" not in msg and "rate_limit" not in msg:
                 raise  # not a rate-limit error -- don't retry blindly
