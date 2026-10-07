@@ -39,8 +39,12 @@ class Settings:
     generator_provider: str = os.getenv("GENERATOR_PROVIDER", "openai")
     generator_model: str = os.getenv("GENERATOR_MODEL", "gpt-5-mini")
 
+    # Was llama-3.1-8b-instant, which Groq retired; the 44.20% / +8.67pp
+    # results in the README were measured on it. gpt-oss-20b is a reasoning
+    # model -- it needs the empty-on-length retry in llm_providers.py, or its
+    # 20-token classification budget is spent thinking and nothing comes back.
     classifier_provider: str = os.getenv("CLASSIFIER_PROVIDER", "groq")
-    classifier_model: str = os.getenv("CLASSIFIER_MODEL", "llama-3.1-8b-instant")
+    classifier_model: str = os.getenv("CLASSIFIER_MODEL", "openai/gpt-oss-20b")
 
     # Snowflake, via key-pair auth (see src/db/snowflake_connection.py).
     #

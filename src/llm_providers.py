@@ -84,14 +84,18 @@ def _generate_gemini(model: str, system_prompt: str, user_prompt: str, max_outpu
         return _with_backoff(lambda: _call(False))  # model may not support the mime-type constraint
 
 
+class _NeedsReasoningHeadroom(Exception):
+    """Internal signal: empty output, cut off by length on max_tokens."""
+
+
 def _generate_openai_compatible(
     client: OpenAI, model: str, system_prompt: str, user_prompt: str, max_output_tokens: int, json_mode: bool
 ) -> str:
-    def _call(use_json_mode: bool, tokens_param: str) -> str:
+    def _call(use_json_mode: bool, tokens_param: str, reasoning_headroom: bool = False) -> str:
         # Models on the max_completion_tokens param are reasoning models --
         # give them room to think on top of the requested output size.
         budget = max_output_tokens
-        if tokens_param == "max_completion_tokens":
+        if tokens_param == "max_completion_tokens" or reasoning_headroom:
             budget += settings.reasoning_token_budget
 
         kwargs = {
@@ -109,6 +113,13 @@ def _generate_openai_compatible(
         content = choice.message.content
 
         if not content or not content.strip():
+            if choice.finish_reason == "length" and tokens_param == "max_tokens" and not reasoning_headroom:
+                # A reasoning model that ACCEPTS max_tokens (Groq's gpt-oss
+                # does) spends that budget thinking and returns nothing --
+                # the classifier's 20-token cap ran out on every call. The
+                # max_completion_tokens path above never sees this, because
+                # only providers that reject max_tokens are routed there.
+                raise _NeedsReasoningHeadroom()
             # Loud failure instead of returning "" -- an empty string would
             # flow downstream as an empty SQL query and silently score as
             # wrong with no diagnosable cause.
@@ -124,6 +135,11 @@ def _generate_openai_compatible(
         # breaking on whichever provider didn't make the change.
         try:
             return _call(use_json_mode, "max_tokens")
+        except _NeedsReasoningHeadroom:
+            # Retried once with the same headroom max_completion_tokens
+            # models get. Only reached by a call that would otherwise have
+            # raised, so every call that already succeeds is unchanged.
+            return _call(use_json_mode, "max_tokens", reasoning_headroom=True)
         except Exception as e:
             msg = str(e)
             if "max_tokens" in msg and "max_completion_tokens" in msg:
