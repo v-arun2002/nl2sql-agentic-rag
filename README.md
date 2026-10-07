@@ -9,7 +9,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![LangGraph](https://img.shields.io/badge/LangGraph-state%20machine-orange)
-![Benchmark](https://img.shields.io/badge/BIRD--SQL%20Mini--Dev-44.20%25-green)
+![Benchmark](https://img.shields.io/badge/BIRD--SQL%20Mini--Dev-44.20%25%20%28prior%20config%29-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ![Demo](docs/demo-nl-sql.png)
@@ -56,6 +56,24 @@ the answer's formula. That makes this a *schema-only* result: the system must
 work out what a question means from table and column structure alone. Published
 numbers on this split generally include evidence, so they aren't directly
 comparable.
+
+**Measured on the original configuration, not the current code.** This 44.20%,
+and the +8.67pp evidence ablation below, were measured with OpenAI `gpt-5-mini`
+as planner and generator and Groq's `llama-3.1-8b-instant` as error classifier
+— a model Groq has since retired. The pipeline has changed twice since:
+
+- the classifier now runs on `openai/gpt-oss-20b` (Groq), with a retry fix for
+  how that reasoning model spends its token budget (`9a33221`);
+- a run now stops cleanly on exhausted provider credit, instead of scoring every
+  remaining question as wrong (`9cdc5be`).
+
+Both are tested fixes. **Neither has been validated against a fresh full
+benchmark run** — that needs OpenAI credit not currently available. One attempt
+got 92 questions in before the balance ran out, which is where the second fix
+came from; 92 questions over 3 of 11 databases is not a result and is not
+reported here. A fresh 500-question baseline and 150-question ablation under the
+current configuration is the documented next step. Until it exists, read 44.20%
+and +8.67pp as results for the configuration above.
 
 ### Per-database accuracy — and the finding that matters
 
@@ -424,6 +442,18 @@ shifts by hours.
 healthcheck timeouts were raised to 60s rather than trimming the image — every
 service reported `unhealthy` while its job was demonstrably alive. The same
 import tax is paid by every task the DAG runs.
+
+**The error classifier runs on a model the headline numbers were never measured
+with.** Groq retired `llama-3.1-8b-instant`. Rule-based classification covers
+clear-cut errors, but an ambiguous failure falls through to an LLM — and with
+the model gone, that unguarded call crashed the whole question. It now falls
+back to `UNKNOWN_ERROR` on any failure (`600d80d`), and the classifier has been
+repointed to `openai/gpt-oss-20b`. The naive swap failed on 5 of 5 calls: it is
+a reasoning model that accepts `max_tokens`, so the classifier's 20-token budget
+went on reasoning and nothing came back, which the fallback would have absorbed
+silently. One retry with reasoning headroom fixed it (`9a33221`). The
+correction loop works again; how well it works under this classifier is exactly
+what the pending fresh baseline would measure.
 
 **None of this is production-grade, and it is not pretending to be.** There is
 no alerting on DAG failure — a failed weekly run is visible in the Airflow UI
